@@ -7,7 +7,7 @@ const uploadAndParsePDF = async (buffer, originalName) => {
     const uploadStream = cloudinary.uploader.upload_stream(
       {
         folder: 'vision-grade/pdfs',
-        resource_type: 'raw',
+        resource_type: 'auto',
         public_id: `${Date.now()}-${originalName.replace(/\s+/g, '_')}`,
         overwrite: false,
       },
@@ -21,7 +21,8 @@ const uploadAndParsePDF = async (buffer, originalName) => {
   //   .text  — full concatenated text string across all pages
   //   .pages — array of { num, text } page objects
   //   .total — total page count
-  const parser = new PDFParse({ data: new Uint8Array(buffer) });
+  // verbosity: 0 = ERRORS only (required — omitting it throws "Cannot read .verbosity of undefined")
+  const parser = new PDFParse({ data: new Uint8Array(buffer), verbosity: 0 });
   const lineStore = await parser.getText();
 
   const extractedText = (lineStore.text || '').replace(/\s+/g, ' ').trim();
@@ -31,10 +32,10 @@ const uploadAndParsePDF = async (buffer, originalName) => {
   await parser.destroy();
 
   return {
-    url:           cloudinaryResult.secure_url,
-    publicId:      cloudinaryResult.public_id,
+    url: cloudinaryResult.secure_url,
+    publicId: cloudinaryResult.public_id,
     extractedText,
-    pageCount:     numPages,
+    pageCount: numPages,
   };
 };
 

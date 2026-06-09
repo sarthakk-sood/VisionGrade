@@ -1,47 +1,64 @@
-const path = require('path');
 const { uploadPDFAsync } = require('../config/multer');
 const { uploadAndParsePDF } = require('../services/pdfService');
 const Project = require('../models/Project');
+const SourceDocument = require('../models/sourceDocument');
 
-// POST /api/questions/upload-pdf
-const uploadPDF = async (req, res, next) => {
+// POST /api/questions/upload-pdfs
+const uploadPDFs = async (req, res, next) => {
   try {
     // Step 1 — run multer
     await uploadPDFAsync(req, res);
 
-    if (!req.file) {
-      return res.status(400).json({ success: false, error: 'No PDF file provided' });
+    const files = [...(req.files?.pdf || []), ...(req.files?.pdfs || [])];
+    if (!files || files.length === 0) {
+      return res.status(400).json({ success: false, error: 'No PDF files provided' });
     }
 
-    const { originalname, buffer } = req.file;
-
-    // Step 2 — upload to Cloudinary + extract text
-    const { url, publicId, extractedText, pageCount } = await uploadAndParsePDF(buffer, originalname);
-
-    if (!extractedText || extractedText.length < 50) {
-      return res.status(422).json({
-        success: false,
-        error: 'Could not extract enough text from this PDF. Make sure it is not a scanned image.',
-      });
-    }
-
-    // Step 3 — save project to MongoDB (linked to the authenticated teacher)
+    // Step 2 — create Project first
     const project = await Project.create({
-      title:         req.body.title || path.basename(originalname, path.extname(originalname)),
-      subject:       req.body.subject || '',
-      createdBy:     req.teacher._id,
-      pdfPath:       url,
-      extractedText,
-      status:        'uploaded',
+      title:   req.body.title || 'Untitled Project',
+      subject: req.body.subject || '',
+      teacherId: req.teacher._id,
+      status:  'uploaded',
     });
 
+    // Step 3 — process each PDF in parallel
+    const results = await Promise.all(
+      files.map(async (file) => {
+        const { url, publicId, extractedText, pageCount } =
+          await uploadAndParsePDF(file.buffer, file.originalname);
+
+        // Save each as its own SourceDocument
+        const doc = await SourceDocument.create({
+          teacherId:     req.teacher._id,
+          projectId:     project._id,
+          filename:      file.originalname,
+          pdfUrl:        url,
+          publicId,
+          extractedText,
+          pageCount,
+          isSelected:    true,
+        });
+
+        return {
+          docId:     doc._id,
+          filename:  file.originalname,
+          pageCount,
+          pdfUrl:    url,
+          extractedTextPreview: extractedText.substring(0, 200) + '...',
+        };
+      })
+    );
+
+    // Step 4 — link all SourceDocuments to Project
+    project.sourceDocs = results.map(r => r.docId);
+    await project.save();
+
     res.status(201).json({
-      success:       true,
-      projectId:     project._id,
-      title:         project.title,
-      pageCount,
-      pdfUrl:        url,
-      extractedText: extractedText.substring(0, 500) + '...', // preview only
+      success:   true,
+      projectId: project._id,
+      title:     project.title,
+      documents: results,
     });
 
   } catch (err) {
@@ -49,4 +66,4 @@ const uploadPDF = async (req, res, next) => {
   }
 };
 
-module.exports = { uploadPDF };
+module.exports = { uploadPDFs };

@@ -1,6 +1,5 @@
 const multer = require('multer');
 
-// Store in memory — Cloudinary upload handles saving to cloud
 const storage = multer.memoryStorage();
 
 const fileFilter = (req, file, cb) => {
@@ -19,20 +18,16 @@ const fileFilter = (req, file, cb) => {
 };
 
 const MAX_MB = parseInt(process.env.MAX_FILE_SIZE_MB || '50');
+const opts = { storage, fileFilter, limits: { fileSize: MAX_MB * 1024 * 1024 } };
 
-const uploadPDF = multer({
-  storage,
-  fileFilter,
-  limits: { fileSize: MAX_MB * 1024 * 1024 },
-}).single('pdf');
+// Accepts both 'pdf' and 'pdfs' field names, max 10 files
+const uploadPDF = multer(opts).fields([
+  { name: 'pdf',  maxCount: 10 },
+  { name: 'pdfs', maxCount: 10 },
+]);
 
-const uploadSheets = multer({
-  storage,
-  fileFilter,
-  limits: { fileSize: MAX_MB * 1024 * 1024 },
-}).array('sheets', 50);
+const uploadSheets = multer(opts).array('sheets', 50);
 
-// Promise wrappers for async/await in controllers
 const uploadPDFAsync = (req, res) =>
   new Promise((resolve, reject) => {
     uploadPDF(req, res, (err) => (err ? reject(err) : resolve()));
