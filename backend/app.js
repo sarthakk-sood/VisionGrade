@@ -12,8 +12,6 @@ const { notFound } = require('./middleware/notFound');
 const healthRoutes = require('./routes/health');
 const questionRoutes = require('./routes/questions');
 // const evaluationRoutes = require('./routes/evaluation'); // uncomment when ready
-// const questionRoutes   = require('./routes/questions');   // uncomment when ready
-// const evaluationRoutes = require('./routes/evaluation'); // uncomment when ready
 
 const app = express();
 
@@ -26,15 +24,24 @@ app.use(cors({
 }));
 
 // ── Rate limiting ─────────────────────────────────────────────────────────────
+// Global limiter — all API routes
 app.use('/api', rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 100,
-  message: { error: 'Too many requests, please try again later.' },
+  message: { success: false, error: 'Too many requests, please try again later.' },
+}));
+
+// Strict limiter — auth routes (brute-force protection)
+app.use('/api/auth', rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 10,
+  message: { success: false, error: 'Too many auth attempts, try again in 15 minutes.' },
 }));
 
 // ── Body parsing ──────────────────────────────────────────────────────────────
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// Keep JSON limit small — file uploads go through Multer (multipart), not JSON
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // ── Logging ───────────────────────────────────────────────────────────────────
 if (process.env.NODE_ENV !== 'test') {
@@ -42,7 +49,8 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 // ── Static uploads ────────────────────────────────────────────────────────────
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+// No static file serving needed — all uploads go to Cloudinary (cloud storage)
+// Serving the local /uploads folder publicly is a security risk; route removed.
 
 // ── Routes ────────────────────────────────────────────────────────────────────
 app.use('/api/health', healthRoutes);

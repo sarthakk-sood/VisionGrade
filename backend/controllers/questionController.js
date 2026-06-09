@@ -1,3 +1,4 @@
+const path = require('path');
 const { uploadPDFAsync } = require('../config/multer');
 const { uploadAndParsePDF } = require('../services/pdfService');
 const Project = require('../models/Project');
@@ -24,10 +25,11 @@ const uploadPDF = async (req, res, next) => {
       });
     }
 
-    // Step 3 — save project to MongoDB
+    // Step 3 — save project to MongoDB (linked to the authenticated teacher)
     const project = await Project.create({
-      title:         req.body.title || originalname.replace('.pdf', ''),
+      title:         req.body.title || path.basename(originalname, path.extname(originalname)),
       subject:       req.body.subject || '',
+      createdBy:     req.teacher._id,
       pdfPath:       url,
       extractedText,
       status:        'uploaded',

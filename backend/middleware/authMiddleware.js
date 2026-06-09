@@ -20,6 +20,7 @@ const protect = async (req, res, next) => {
 
     next();
   } catch (err) {
+    console.warn(`[AUTH] Token verification failed: ${err.message} — IP: ${req.ip}`);
     return res.status(401).json({ success: false, error: 'Not authorized, invalid token' });
   }
 };

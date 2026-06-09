@@ -7,7 +7,11 @@ const projectSchema = new mongoose.Schema({
     trim: true,
   },
   subject: { type: String, trim: true },
-  createdBy: { type: String, default: 'teacher' }, // extend later with auth
+  createdBy: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Teacher',
+    required: [true, 'Project must belong to a teacher'],
+  },
   pdfPath: { type: String },       // path to uploaded reference PDF
   extractedText: { type: String }, // raw text from pdf-parse
   topics: [{ type: String }],      // LLM-detected topics

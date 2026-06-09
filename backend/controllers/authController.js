@@ -11,7 +11,8 @@ const generateToken = (id) => {
 // POST /api/auth/register
 const register = async (req, res, next) => {
   try {
-    const { name, email, password, department } = req.body;
+    const { name, password, department } = req.body;
+    const email = req.body.email?.toLowerCase().trim();
 
     if (!name || !email || !password) {
       return res.status(400).json({ success: false, error: 'Name, email and password are required' });
@@ -42,7 +43,8 @@ const register = async (req, res, next) => {
 // POST /api/auth/login
 const login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { password } = req.body;
+    const email = req.body.email?.toLowerCase().trim();
 
     if (!email || !password) {
       return res.status(400).json({ success: false, error: 'Email and password are required' });
@@ -74,17 +76,21 @@ const login = async (req, res, next) => {
 };
 
 // GET /api/auth/me
-const getMe = async (req, res) => {
-  res.json({
-    success: true,
-    teacher: {
-      id:          req.teacher._id,
-      name:        req.teacher.name,
-      email:       req.teacher.email,
-      department:  req.teacher.department,
-      institution: req.teacher.institution,
-    },
-  });
+const getMe = async (req, res, next) => {
+  try {
+    res.json({
+      success: true,
+      teacher: {
+        id:          req.teacher._id,
+        name:        req.teacher.name,
+        email:       req.teacher.email,
+        department:  req.teacher.department,
+        institution: req.teacher.institution,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
 };
 
 module.exports = { register, login, getMe };
