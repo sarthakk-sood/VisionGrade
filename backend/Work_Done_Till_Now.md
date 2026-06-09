@@ -93,41 +93,7 @@ VisionGrade/
 
 Create a `.env` file in the `backend/` directory with the following:
 
-```env
-# Server
-PORT=5000
-NODE_ENV=development
-CLIENT_URL=http://localhost:5173
 
-# MongoDB
-MONGO_URI=mongodb+srv://<username>:<password>@cluster0.xxxxx.mongodb.net
-DB_NAME=vision_grade
-
-# Cloudinary
-CLOUDINARY_CLOUD_NAME=your_cloud_name
-CLOUDINARY_API_KEY=your_api_key
-CLOUDINARY_API_SECRET=your_api_secret
-
-# Auth
-JWT_SECRET=visgrade_super_secret_key_2026
-JWT_EXPIRES_IN=7d
-
-# File Upload
-MAX_FILE_SIZE_MB=50
-
-# OpenAI (not yet used — needed for topic detection)
-OPENAI_API_KEY=sk-...
-
-# Google Gemini (not yet used — fallback LLM)
-GEMINI_API_KEY=...
-
-# Google Cloud Vision (not yet used — OCR)
-GOOGLE_APPLICATION_CREDENTIALS=./config/google-vision-key.json
-```
-
-> Never commit `.env` to GitHub. It is already in `.gitignore`.
-
----
 
 ## Getting Started
 
