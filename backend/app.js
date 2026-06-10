@@ -11,6 +11,7 @@ const errorHandler = require('./middleware/errorHandler');
 const { notFound } = require('./middleware/notFound');
 const healthRoutes = require('./routes/health');
 const questionRoutes = require('./routes/questions');
+const topicRoutes    = require('./routes/topics');
 // const evaluationRoutes = require('./routes/evaluation'); // uncomment when ready
 
 const app = express();
@@ -55,6 +56,7 @@ if (process.env.NODE_ENV !== 'test') {
 // ── Routes ────────────────────────────────────────────────────────────────────
 app.use('/api/health', healthRoutes);
 app.use('/api/questions', questionRoutes);
+app.use('/api/topics', topicRoutes);
 app.use('/api/auth', authRoutes);
 // app.use('/api/evaluation', evaluationRoutes);
 

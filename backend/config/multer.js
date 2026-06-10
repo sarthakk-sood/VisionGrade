@@ -22,7 +22,7 @@ const opts = { storage, fileFilter, limits: { fileSize: MAX_MB * 1024 * 1024 } }
 
 // Accepts both 'pdf' and 'pdfs' field names, max 10 files
 const uploadPDF = multer(opts).fields([
-  { name: 'pdf',  maxCount: 10 },
+  { name: 'pdf', maxCount: 10 },
   { name: 'pdfs', maxCount: 10 },
 ]);
 

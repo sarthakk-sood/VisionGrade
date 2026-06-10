@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { uploadApi, topicApi, questionApi } from '../services/api';
 
 // ─── Exam Sessions ────────────────────────────────────────────────────────────
 const examSessions = [
@@ -350,6 +351,36 @@ export const useAppStore = create((set, get) => ({
 
   loadingStates: { uploading: false, generating: false, ocrReview: false, evaluating: false },
 
+  // ─── Project / Topic API state ─────────────────────────────────────────────
+  projectId:       null,
+  topicsLoading:   false,
+  topicsSaved:     false,
+  topicsError:     null,
+  detectedSubject: null,
+  llmProvider:     null,
+
+  // ─── Exam Info (teacher fills on QuestionGeneration page) ─────────────────────
+  examInfo: {
+    examTitle:       '',
+    subject:         '',
+    totalMarks:      100,
+    durationMinutes: 90,
+    instructions:    [],
+    questionTypes: {
+      MCQ:             { count: 0, marks: 1 },
+      ShortAnswer:     { count: 0, marks: 2 },
+      MediumAnswer:    { count: 0, marks: 3 },
+      LongAnswer:      { count: 0, marks: 5 },
+      FillInTheBlanks: { count: 0, marks: 1 },
+    },
+  },
+
+  // ─── Generated questions ───────────────────────────────────────────────────
+  generatedQuestions: [],
+  questionsLoading:   false,
+  questionsError:     null,
+  generationProvider: null,
+
   // ─── Actions ───────────────────────────────────────────────────────────────
   setLoadingState: (key, value) =>
     set((s) => ({ loadingStates: { ...s.loadingStates, [key]: value } })),
@@ -431,6 +462,169 @@ export const useAppStore = create((set, get) => ({
 
   removeUploadedFile: (id) =>
     set((s) => ({ uploadedFiles: s.uploadedFiles.filter((f) => f.id !== id) })),
+
+  // ─── Real backend: upload PDFs and create project ─────────────────────────
+  uploadPDFsToBackend: async (files, title, subject) => {
+    set((s) => ({ loadingStates: { ...s.loadingStates, uploading: true }, topicsError: null }));
+    try {
+      const formData = new FormData();
+      formData.append('title',   title   || 'Untitled Project');
+      formData.append('subject', subject || '');
+      files.forEach((f) => formData.append('pdfs', f));
+
+      const data = await uploadApi.uploadPDFs(formData, (pct) => {
+        // Update each uploaded file's progress in the store
+        set((s) => ({
+          uploadedFiles: s.uploadedFiles.map((uf) =>
+            files.some((f) => f.name === uf.name) ? { ...uf, progress: pct } : uf
+          ),
+        }));
+      });
+
+      // Save projectId and add files to the uploaded list
+      set((s) => ({
+        projectId: data.projectId,
+        uploadedFiles: [
+          ...s.uploadedFiles.filter((uf) => !files.some((f) => f.name === uf.name)),
+          ...(data.documents || []).map((doc) => ({
+            id:         doc.docId,
+            name:       doc.filename,
+            size:       'uploaded',
+            pages:      doc.pageCount,
+            uploadTime: new Date().toLocaleTimeString(),
+            progress:   100,
+            pdfUrl:     doc.pdfUrl,
+          })),
+        ],
+        loadingStates: { ...s.loadingStates, uploading: false },
+      }));
+
+      return data.projectId;
+    } catch (err) {
+      set((s) => ({
+        topicsError: err?.response?.data?.error || err.message || 'Upload failed',
+        loadingStates: { ...s.loadingStates, uploading: false },
+      }));
+      return null;
+    }
+  },
+
+  // ─── Real backend: detect topics via GPT-4o / Gemini ─────────────────────
+  detectTopicsFromBackend: async (projectId) => {
+    set({ topicsLoading: true, topicsError: null, topicsSaved: false });
+    try {
+      const data = await topicApi.detect(projectId);
+      set({
+        topics:          data.topics,           // already has isSelected: true
+        detectedSubject: data.detectedSubject,
+        llmProvider:     data.provider,
+        topicsLoading:   false,
+      });
+      return data.topics;
+    } catch (err) {
+      set({
+        topicsError:  err?.response?.data?.error || err.message || 'Topic detection failed',
+        topicsLoading: false,
+      });
+      return null;
+    }
+  },
+
+  // ─── Toggle a single topic's isSelected ──────────────────────────────────
+  toggleTopicSelection: (id) =>
+    set((s) => ({
+      topics: s.topics.map((t) => (t.id === id ? { ...t, isSelected: !t.isSelected } : t)),
+      topicsSaved: false,
+    })),
+
+  // ─── Bulk select/deselect all ────────────────────────────────────────────
+  selectAllTopics:   () => set((s) => ({ topics: s.topics.map((t) => ({ ...t, isSelected: true  })), topicsSaved: false })),
+  deselectAllTopics: () => set((s) => ({ topics: s.topics.map((t) => ({ ...t, isSelected: false })), topicsSaved: false })),
+
+  // ─── Save topic selection to backend ─────────────────────────────────────
+  saveTopicSelection: async (projectId) => {
+    const topics = get().topics;
+    try {
+      await topicApi.updateSelection(
+        projectId,
+        topics.map((t) => ({ id: t.id, isSelected: t.isSelected }))
+      );
+      set({ topicsSaved: true });
+      return true;
+    } catch (err) {
+      set({ topicsError: err?.response?.data?.error || err.message || 'Save failed' });
+      return false;
+    }
+  },
+
+  // ─── Update exam info ────────────────────────────────────────────────────
+  setExamInfo: (patch) =>
+    set((s) => ({ examInfo: { ...s.examInfo, ...patch } })),
+
+  setQuestionType: (type, patch) =>
+    set((s) => ({
+      examInfo: {
+        ...s.examInfo,
+        questionTypes: {
+          ...s.examInfo.questionTypes,
+          [type]: { ...s.examInfo.questionTypes[type], ...patch },
+        },
+      },
+    })),
+
+  // ─── Update per-topic config (marks, weightage, difficulty) ──────────────────
+  updateTopicConfig: (id, patch) =>
+    set((s) => ({
+      topics: s.topics.map((t) => (t.id === id ? { ...t, ...patch } : t)),
+    })),
+
+  // ─── Generate questions via LLM ─────────────────────────────────────────────
+  generateQuestionsFromBackend: async (projectId) => {
+    const s = get();
+    set({ questionsLoading: true, questionsError: null });
+
+    // Only include selected topics
+    const selectedTopics = s.topics
+      .filter((t) => t.isSelected)
+      .map((t) => ({
+        topicName:     t.name,
+        weightage:     t.weightage     || 0,
+        marks:         t.marks         || 0,
+        difficulty:    t.difficulty    || 'Mixed',
+      }));
+
+    try {
+      const data = await questionApi.generate(projectId, {
+        examInfo: s.examInfo,
+        topics:   selectedTopics,
+      });
+      set({
+        generatedQuestions: data.questions,
+        generationProvider: data.provider,
+        questionsLoading:   false,
+        // Sync into the existing questions slice so QuestionReview still works
+        questions: data.questions.map((q, i) => ({
+          id:         i + 1,
+          type:       q.type,
+          text:       q.questionText,
+          topic:      q.topicName,
+          marks:      q.marks,
+          difficulty: q.difficulty,
+          approved:   false,
+          options:    q.options,
+          answer:     q.correctAnswer,
+          explanation: q.explanation,
+        })),
+      });
+      return data.questions;
+    } catch (err) {
+      set({
+        questionsError:   err?.response?.data?.error || err.message || 'Question generation failed',
+        questionsLoading: false,
+      });
+      return null;
+    }
+  },
 
   // ─── Computed helpers ──────────────────────────────────────────────────────
   activeQuestionCount: () => get().questions.length,

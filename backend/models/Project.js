@@ -1,5 +1,33 @@
 const mongoose = require('mongoose');
 
+// ── Sub-schema: detected topic (with teacher config) ──────────────────────────
+const topicSchema = new mongoose.Schema({
+  id:          { type: Number },
+  name:        { type: String, required: true, trim: true },
+  description: { type: String, default: '' },
+  keywords:    [{ type: String }],
+  isSelected:  { type: Boolean, default: true },
+
+  // Teacher-configured per-topic generation settings
+  marks:          { type: Number, default: 0 },
+  weightage:      { type: Number, default: 0 },   // percentage
+  difficulty: { type: String, enum: ['Easy', 'Medium', 'Hard', 'Mixed'], default: 'Mixed' },
+}, { _id: false });
+
+// ── Sub-schema: a single generated question ───────────────────────────────────
+const generatedQuestionSchema = new mongoose.Schema({
+  topicName:    { type: String },
+  type:         { type: String, enum: ['MCQ','ShortAnswer','MediumAnswer','LongAnswer','FillInTheBlanks'] },
+  difficulty:   { type: String, enum: ['Easy','Medium','Hard'] },
+  marks:        { type: Number },
+  questionText: { type: String },
+  options:      [{ type: String }],   // only for MCQ
+  correctAnswer:{ type: String },
+  explanation:  { type: String },
+  approved:     { type: Boolean, default: false },
+}, { _id: true });
+
+// ── Main Project schema ───────────────────────────────────────────────────────
 const projectSchema = new mongoose.Schema({
   title: {
     type: String,
@@ -17,7 +45,34 @@ const projectSchema = new mongoose.Schema({
     ref: 'SourceDocument',
   }],
   extractedText: { type: String },
-  topics: [{ type: String }],
+
+  // Topics detected by LLM — each has teacher-configured generation settings
+  topics: { type: [topicSchema], default: [] },
+
+  // LLM-inferred subject
+  detectedSubject: { type: String, default: null },
+
+  // Exam info used for question generation
+  examInfo: {
+    examTitle:       { type: String },
+    totalMarks:      { type: Number, default: 100 },
+    durationMinutes: { type: Number, default: 90 },
+    instructions:    [{ type: String }],
+    questionTypes: {
+      MCQ:             { count: { type: Number, default: 0 }, marks: { type: Number, default: 1 } },
+      ShortAnswer:     { count: { type: Number, default: 0 }, marks: { type: Number, default: 2 } },
+      MediumAnswer:    { count: { type: Number, default: 0 }, marks: { type: Number, default: 3 } },
+      LongAnswer:      { count: { type: Number, default: 0 }, marks: { type: Number, default: 5 } },
+      FillInTheBlanks: { count: { type: Number, default: 0 }, marks: { type: Number, default: 1 } },
+    },
+  },
+
+  // LLM-generated questions
+  generatedQuestions: { type: [generatedQuestionSchema], default: [] },
+
+  // Which LLM provider generated the questions
+  generationProvider: { type: String, default: null },
+
   status: {
     type: String,
     enum: ['uploaded', 'topics_detected', 'paper_generated', 'approved'],
@@ -25,4 +80,4 @@ const projectSchema = new mongoose.Schema({
   },
 }, { timestamps: true });
 
-module.exports = mongoose.model('Project', projectSchema);
+module.exports = mongoose.model('Project', projectSchema);
