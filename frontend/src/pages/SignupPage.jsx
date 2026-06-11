@@ -6,41 +6,39 @@ import Button from '../components/common/Button';
 import Card   from '../components/common/Card';
 import Input  from '../components/common/Input';
 import { authApi } from '../services/api';
-import { useAppStore } from '../store/useAppStore';
 
-export default function LoginPage() {
+export default function SignupPage() {
   const navigate = useNavigate();
-  const [email,    setEmail]    = useState('');
-  const [password, setPassword] = useState('');
-  const [loading,  setLoading]  = useState(false);
-  const [error,    setError]    = useState(null);
+  const [name,            setName]            = useState('');
+  const [email,           setEmail]           = useState('');
+  const [password,        setPassword]        = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading,         setLoading]         = useState(false);
+  const [error,           setError]           = useState(null);
 
-  const handleLogin = async (e) => {
+  const handleSignup = async (e) => {
     e.preventDefault();
     setError(null);
 
-    if (!email || !password) {
-      setError('Please enter your email and password.');
+    if (!name || !email || !password || !confirmPassword) {
+      setError('Please fill in all fields.');
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setError('Passwords do not match.');
       return;
     }
 
     setLoading(true);
     try {
-      const data = await authApi.login(email, password);
-
-      // ✅ Store the JWT — api.js interceptor reads this on every request
-      if (data.token) {
-        localStorage.setItem('vg_token', data.token);
-        localStorage.setItem('vg_user', JSON.stringify(data.teacher));
-        useAppStore.getState().setUser(data.teacher);
-      }
-
-      navigate('/dashboard');
+      await authApi.register({ name, email, password });
+      navigate('/verify-otp', { state: { email } });
     } catch (err) {
       setError(
         err?.response?.data?.error ||
         err?.response?.data?.message ||
-        'Login failed. Please check your credentials.'
+        'Registration failed. Please try again.'
       );
     } finally {
       setLoading(false);
@@ -61,15 +59,23 @@ export default function LoginPage() {
             </div>
             <div>
               <p className="text-sm uppercase tracking-[0.3em] text-blue-300/80">VisionGrade</p>
-              <h1 className="text-2xl font-bold text-white">Faculty Sign In</h1>
+              <h1 className="text-2xl font-bold text-white">Faculty Sign Up</h1>
             </div>
           </div>
 
           <p className="mt-4 text-sm leading-7 text-slate-400">
-            Access the AI-assisted academic evaluation workspace with secure password login.
+            Create an account to start evaluating answer sheets with AI assistance.
           </p>
 
-          <form onSubmit={handleLogin} className="mt-8 space-y-5">
+          <form onSubmit={handleSignup} className="mt-8 space-y-5">
+            <Input
+              label="Full Name"
+              type="text"
+              placeholder="Dr. John Doe"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              disabled={loading}
+            />
             <Input
               label="Email address"
               type="email"
@@ -81,9 +87,17 @@ export default function LoginPage() {
             <Input
               label="Password"
               type="password"
-              placeholder="Enter your password"
+              placeholder="Create a password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
+              disabled={loading}
+            />
+            <Input
+              label="Confirm Password"
+              type="password"
+              placeholder="Confirm your password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
               disabled={loading}
             />
 
@@ -99,16 +113,6 @@ export default function LoginPage() {
               </motion.div>
             )}
 
-            <div className="flex items-center justify-between text-sm text-slate-400">
-              <label className="flex items-center gap-2">
-                <input type="checkbox" className="h-4 w-4 rounded border-white/20 bg-white/5" />
-                Remember me
-              </label>
-              <button type="button" className="text-blue-300 transition hover:text-blue-200">
-                Forgot password?
-              </button>
-            </div>
-
             <div className="mt-8 space-y-4">
               <Button
                 type="submit"
@@ -119,10 +123,10 @@ export default function LoginPage() {
                   : <ShieldCheck className="h-4 w-4" />
                 }
               >
-                {loading ? 'Signing in…' : 'Sign In'}
+                {loading ? 'Creating account…' : 'Sign Up'}
               </Button>
-              <Button to="/signup" variant="secondary" className="w-full" disabled={loading}>
-                Create an account
+              <Button to="/login" variant="secondary" className="w-full" disabled={loading}>
+                Sign in instead
               </Button>
             </div>
           </form>

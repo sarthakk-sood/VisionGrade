@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api',
   timeout: 120000, // 2 min — topic detection can take ~60s with Gemini retry
 });
 
@@ -11,6 +11,17 @@ api.interceptors.request.use((config) => {
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response && error.response.status === 401) {
+      localStorage.removeItem('vg_token');
+      window.location.href = '/login';
+    }
+    return Promise.reject(error);
+  }
+);
 
 // ── Topic API ─────────────────────────────────────────────────────────────────
 export const topicApi = {
@@ -76,6 +87,9 @@ export const authApi = {
 
   register: (payload) =>
     api.post('/auth/register', payload).then((r) => r.data),
+
+  verifyOTP: (email, otp) =>
+    api.post('/auth/verify-otp', { email, otp }).then((r) => r.data),
 };
 
 export const apiService = {

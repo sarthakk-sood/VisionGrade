@@ -18,6 +18,10 @@ const protect = async (req, res, next) => {
       return res.status(401).json({ success: false, error: 'Teacher not found' });
     }
 
+    if (!req.teacher.isVerified) {
+      return res.status(403).json({ message: "Account not verified. Please verify your email." });
+    }
+
     next();
   } catch (err) {
     console.warn(`[AUTH] Token verification failed: ${err.message} — IP: ${req.ip}`);

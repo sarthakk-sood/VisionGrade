@@ -318,14 +318,19 @@ const uploadedFiles = [
   { id: 3, name: 'Topic_Coverage_Guide.pdf',       size: '1.6 MB', pages: 12, uploadTime: '10:25 AM', progress: 100 },
 ];
 
+// ─── Safe LocalStorage Parse ────────────────────────────────────────────────
+const getInitialUser = () => {
+  try {
+    const item = localStorage.getItem('vg_user');
+    return item && item !== 'undefined' ? JSON.parse(item) : null;
+  } catch (err) {
+    return null;
+  }
+};
+
 // ─── Store ────────────────────────────────────────────────────────────────────
 export const useAppStore = create((set, get) => ({
-  user: {
-    name: 'Dr. Ananya Rao',
-    role: 'Faculty Evaluator',
-    email: 'ananya.rao@visiongrade.edu',
-    institution: 'NIT Trichy',
-  },
+  user: getInitialUser(),
   session: {
     id: 'VG-2026-MIDSEM-07',
     course: 'Database Management Systems',
@@ -386,6 +391,11 @@ export const useAppStore = create((set, get) => ({
     set((s) => ({ loadingStates: { ...s.loadingStates, [key]: value } })),
 
   setUser:    (user)    => set({ user }),
+  logout: () => {
+    localStorage.removeItem('vg_token');
+    localStorage.removeItem('vg_user');
+    set({ user: null });
+  },
   setSession: (session) => set({ session }),
 
   selectSession: (id) => set({ selectedSessionId: id }),

@@ -21,6 +21,19 @@ const teacherSchema = new mongoose.Schema({
   },
   department: { type: String, trim: true },
   institution: { type: String, default: 'Thapar Institute of Engineering & Technology' },
+  isVerified: {
+    type: Boolean,
+    default: false,
+    required: true,
+  },
+  otp: {
+    type: String,
+    default: null,
+  },
+  otpExpiresAt: {
+    type: Date,
+    default: null,
+  },
 }, { timestamps: true });
 
 // Hash password before saving

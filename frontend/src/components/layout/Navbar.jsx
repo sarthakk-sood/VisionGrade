@@ -14,7 +14,7 @@ const navItems = [
 
 export default function Navbar() {
   const user = useAppStore((s) => s.user);
-  const initials = user.name.split(' ').map((n) => n[0]).join('').slice(0, 2);
+  const initials = user?.name ? user.name.split(' ').map((n) => n[0]).join('').slice(0, 2) : '';
 
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const profileRef = useRef(null);
@@ -77,8 +77,10 @@ export default function Navbar() {
 
         {/* ── Right ── */}
         <div className="flex items-center gap-2">
-          {/* Notifications Dropdown */}
-          <div className="relative" ref={notifRef}>
+          {user ? (
+            <>
+              {/* Notifications Dropdown */}
+              <div className="relative" ref={notifRef}>
             <button 
               onClick={() => setIsNotifOpen(!isNotifOpen)}
               className={`relative flex h-9 w-9 items-center justify-center rounded-xl border transition ${
@@ -176,7 +178,10 @@ export default function Navbar() {
                     </Link>
                     <Link
                       to="/login"
-                      onClick={() => setIsProfileOpen(false)}
+                      onClick={() => {
+                        setIsProfileOpen(false);
+                        useAppStore.getState().logout();
+                      }}
                       className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold text-rose-300 transition hover:bg-rose-500/10 hover:text-rose-200"
                     >
                       <LogOut className="h-4 w-4" />
@@ -187,6 +192,12 @@ export default function Navbar() {
               )}
             </AnimatePresence>
           </div>
+            </>
+          ) : (
+            <Link to="/login" className="flex items-center gap-2 rounded-xl bg-blue-500 px-4 py-2 text-xs font-bold text-white shadow-lg shadow-blue-500/20 transition hover:bg-blue-600">
+              Sign In
+            </Link>
+          )}
 
           {/* Mobile menu */}
           <button className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/[0.07] bg-white/[0.04] text-white lg:hidden">
