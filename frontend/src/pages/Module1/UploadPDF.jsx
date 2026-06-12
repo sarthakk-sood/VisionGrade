@@ -11,6 +11,7 @@ import Button        from '../../components/common/Button';
 import ProgressBar   from '../../components/common/ProgressBar';
 import StatusBadge   from '../../components/common/StatusBadge';
 import { useAppStore } from '../../store/useAppStore';
+import { StepGuard } from '../../hooks/useWorkflow';
 
 const BG = 'bg-[radial-gradient(circle_at_top,rgba(37,99,235,0.12),transparent_22%),linear-gradient(180deg,#020617_0%,#071226_55%,#0f172a_100%)]';
 const M1_STEPS = ['Exam Details', 'Upload PDFs', 'Topics & Weightage', 'Generate Questions', 'Review Questions', 'Export'];
@@ -20,15 +21,16 @@ export default function UploadPDF() {
   const fileInputRef = useRef(null);
 
   // Store state
-  const uploadedFiles          = useAppStore((s) => s.uploadedFiles);
-  const removeUploadedFile     = useAppStore((s) => s.removeUploadedFile);
-  const uploadPDFsToBackend    = useAppStore((s) => s.uploadPDFsToBackend);
+  const uploadedFiles           = useAppStore((s) => s.uploadedFiles);
+  const removeUploadedFile      = useAppStore((s) => s.removeUploadedFile);
+  const uploadPDFsToBackend     = useAppStore((s) => s.uploadPDFsToBackend);
   const detectTopicsFromBackend = useAppStore((s) => s.detectTopicsFromBackend);
-  const loadingStates          = useAppStore((s) => s.loadingStates);
-  const topicsLoading          = useAppStore((s) => s.topicsLoading);
-  const topicsError            = useAppStore((s) => s.topicsError);
-  const projectId              = useAppStore((s) => s.projectId);
-  const examDetails            = useAppStore((s) => s.session);
+  const loadingStates           = useAppStore((s) => s.loadingStates);
+  const topicsLoading           = useAppStore((s) => s.topicsLoading);
+  const topicsError             = useAppStore((s) => s.topicsError);
+  const projectId               = useAppStore((s) => s.projectId);
+  const examDetails             = useAppStore((s) => s.session);
+  const completeM1Step          = useAppStore((s) => s.completeM1Step);
 
   // Local state for staged files (before upload)
   const [stagedFiles, setStagedFiles]   = useState([]);
@@ -71,25 +73,25 @@ export default function UploadPDF() {
 
     let pid = projectId;
 
-    // Only upload if we have new staged files
     if (stagedFiles.length > 0) {
       pid = await uploadPDFsToBackend(
         stagedFiles,
         examDetails?.course || 'Untitled Project',
         examDetails?.course || ''
       );
-      if (!pid) return; // error already set in store
+      if (!pid) return;
       setStagedFiles([]);
     }
 
-    // Detect topics via GPT-4o / Gemini
     const detected = await detectTopicsFromBackend(pid);
     if (detected) {
+      completeM1Step(2);
       navigate('/module1/topics');
     }
   };
 
   return (
+    <StepGuard step={2}>
     <div className={`min-h-screen ${BG}`}>
       <Navbar />
       <PageContainer subtitle="Module 1 / Step 2" title="Upload PDFs">
@@ -307,5 +309,6 @@ export default function UploadPDF() {
         </div>
       </PageContainer>
     </div>
+    </StepGuard>
   );
 }

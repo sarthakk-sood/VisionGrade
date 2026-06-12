@@ -122,6 +122,13 @@ export default function LoginPage() {
                 Back to Home
               </Button>
             </div>
+
+            <p className="mt-6 text-center text-sm text-slate-500">
+              Don&apos;t have an account?{' '}
+              <a href="/register" className="text-blue-400 hover:text-blue-300 transition-colors font-medium">
+                Register here
+              </a>
+            </p>
           </form>
         </Card>
       </div>

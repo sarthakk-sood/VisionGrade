@@ -4,6 +4,7 @@ import {
   Check, RefreshCw, Edit3, Copy, Trash2, Plus,
   AlertTriangle, CheckCircle2, ArrowRight, ArrowLeft, Download,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import Navbar        from '../../components/layout/Navbar';
 import Sidebar       from '../../components/layout/Sidebar';
 import PageContainer from '../../components/layout/PageContainer';
@@ -12,6 +13,7 @@ import Card          from '../../components/common/Card';
 import Button        from '../../components/common/Button';
 import StatusBadge   from '../../components/common/StatusBadge';
 import { useAppStore } from '../../store/useAppStore';
+import { StepGuard } from '../../hooks/useWorkflow';
 
 const BG = 'bg-[radial-gradient(circle_at_top,rgba(37,99,235,0.12),transparent_22%),linear-gradient(180deg,#020617_0%,#071226_55%,#0f172a_100%)]';
 const M1_STEPS = ['Exam Details', 'Upload PDFs', 'Topics & Weightage', 'Generate Questions', 'Review Questions', 'Export'];
@@ -27,24 +29,35 @@ const DIFF_STYLE = {
   Hard:   'bg-rose-500/15   text-rose-300',
 };
 
-function ActionBtn({ onClick, className, icon: Icon, label }) {
+function ActionBtn({ onClick, className, icon: Icon, label, loading = false, disabled = false }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${className}`}
+      disabled={loading || disabled}
+      className={`flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${className}`}
     >
-      <Icon className="h-3.5 w-3.5" />
+      {loading
+        ? <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+        : <Icon className="h-3.5 w-3.5" />}
       {label}
     </button>
   );
 }
 
 export default function QuestionReview() {
-  const questions       = useAppStore((s) => s.questions);
-  const approveQuestion = useAppStore((s) => s.approveQuestion);
+  const navigate           = useNavigate();
+  const questions          = useAppStore((s) => s.questions);
+  const approveQuestion    = useAppStore((s) => s.approveQuestion);
   const regenerateQuestion = useAppStore((s) => s.regenerateQuestion);
-  const removeQuestion  = useAppStore((s) => s.removeQuestion);
+  const removeQuestion     = useAppStore((s) => s.removeQuestion);
+  const completeM1Step     = useAppStore((s) => s.completeM1Step);
+  const regeneratingIds    = useAppStore((s) => s.regeneratingIds);
+
+  const handleExport = () => {
+    completeM1Step(5);
+    navigate('/module1/blueprint');
+  };
 
   const totalMarks  = questions.reduce((sum, q) => sum + q.marks, 0);
   const targetMarks = 100;
@@ -56,7 +69,8 @@ export default function QuestionReview() {
   const longCount   = questions.filter((q) => q.type === 'Long').length;
 
   return (
-    <div className={`min-h-screen ${BG}`}>
+    <StepGuard step={5}>
+      <div className={`min-h-screen ${BG}`}>
       <Navbar />
       <PageContainer subtitle="Module 1 / Step 5" title="Review Questions">
         <div className="flex flex-col gap-6 lg:flex-row">
@@ -148,7 +162,8 @@ export default function QuestionReview() {
                         <ActionBtn
                           onClick={() => regenerateQuestion(q.id)}
                           icon={RefreshCw}
-                          label="Regenerate"
+                          label={regeneratingIds?.has(q.id) ? 'Regenerating…' : 'Regenerate'}
+                          loading={regeneratingIds?.has(q.id)}
                           className="border-blue-400/25 bg-blue-500/10 text-blue-300 hover:bg-blue-500/20"
                         />
                         <ActionBtn
@@ -215,10 +230,10 @@ export default function QuestionReview() {
 
             {/* ── Actions ── */}
             <div className="mt-5 flex items-center justify-between">
-              <Button variant="ghost" to="/module1/generate" icon={<ArrowLeft className="h-4 w-4" />}>
+              <Button to="/module1/generate" variant="ghost" icon={<ArrowLeft className="h-4 w-4" />}>
                 Back
               </Button>
-              <Button to="/module1/blueprint" icon={<Download className="h-4 w-4" />}>
+              <Button onClick={handleExport} icon={<Download className="h-4 w-4" />}>
                 Export Paper
               </Button>
             </div>
@@ -226,5 +241,6 @@ export default function QuestionReview() {
         </div>
       </PageContainer>
     </div>
+    </StepGuard>
   );
 }

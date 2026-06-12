@@ -351,6 +351,11 @@ export const useAppStore = create((set, get) => ({
 
   loadingStates: { uploading: false, generating: false, ocrReview: false, evaluating: false },
 
+  // ─── Module 1 Workflow — step gate ────────────────────────────────────────
+  // 0 = nothing done yet, 1 = ExamDetails done, 2 = PDFs uploaded + topics detected,
+  // 3 = topics saved, 4 = questions generated, 5 = questions reviewed, 6 = exported
+  m1CompletedStep: 0,
+
   // ─── Project / Topic API state ─────────────────────────────────────────────
   projectId:       null,
   topicsLoading:   false,
@@ -384,6 +389,35 @@ export const useAppStore = create((set, get) => ({
   // ─── Actions ───────────────────────────────────────────────────────────────
   setLoadingState: (key, value) =>
     set((s) => ({ loadingStates: { ...s.loadingStates, [key]: value } })),
+
+  /** Mark step N as completed (only advances forward, never goes back). */
+  completeM1Step: (step) =>
+    set((s) => ({ m1CompletedStep: Math.max(s.m1CompletedStep, step) })),
+
+  /** Resets the whole Module 1 workflow so teacher can start a new exam. */
+  resetM1Workflow: () =>
+    set({
+      m1CompletedStep: 0,
+      projectId:        null,
+      topics:           [],
+      detectedSubject:  null,
+      llmProvider:      null,
+      generatedQuestions: [],
+      questionsError:   null,
+      topicsError:      null,
+      uploadedFiles:    [],
+      examInfo: {
+        examTitle: '', subject: '', totalMarks: 100, durationMinutes: 90,
+        instructions: [],
+        questionTypes: {
+          MCQ:             { count: 0, marks: 1 },
+          ShortAnswer:     { count: 0, marks: 2 },
+          MediumAnswer:    { count: 0, marks: 3 },
+          LongAnswer:      { count: 0, marks: 5 },
+          FillInTheBlanks: { count: 0, marks: 1 },
+        },
+      },
+    }),
 
   setUser:    (user)    => set({ user }),
   setSession: (session) => set({ session }),
@@ -432,12 +466,68 @@ export const useAppStore = create((set, get) => ({
   removeQuestion: (id) =>
     set((s) => ({ questions: s.questions.filter((q) => q.id !== id) })),
 
-  regenerateQuestion: (id) =>
-    set((s) => ({
-      questions: s.questions.map((q) =>
-        q.id === id ? { ...q, approved: false, text: `${q.text} (regenerated)` } : q,
-      ),
-    })),
+  // Tracks which question IDs are currently being regenerated (for per-button spinner)
+  regeneratingIds: new Set(),
+
+  regenerateQuestion: async (questionId) => {
+    const s = get();
+    const projectId = s.projectId;
+    const question  = s.questions.find((q) => q.id === questionId);
+
+    // Mark as regenerating
+    set((prev) => {
+      const ids = new Set(prev.regeneratingIds);
+      ids.add(questionId);
+      return { regeneratingIds: ids };
+    });
+
+    try {
+      // Fall back gracefully if there's no real projectId (demo mode)
+      if (!projectId) {
+        await new Promise((r) => setTimeout(r, 1200)); // simulate delay
+        set((prev) => ({
+          questions: prev.questions.map((q) =>
+            q.id === questionId
+              ? { ...q, approved: false, text: `[Regenerated] ${q.text}` }
+              : q,
+          ),
+        }));
+        return;
+      }
+
+      const data = await questionApi.regenerateSingle(projectId, questionId, {
+        questionType: question?.type,
+        topicName:    question?.topic,
+        marks:        question?.marks,
+        difficulty:   question?.difficulty,
+      });
+
+      const newQ = data.question;
+      set((prev) => ({
+        questions: prev.questions.map((q) =>
+          q.id === questionId
+            ? {
+                ...q,
+                text:        newQ.questionText,
+                options:     newQ.options     ?? q.options,
+                answer:      newQ.correctAnswer,
+                explanation: newQ.explanation,
+                approved:    false,
+              }
+            : q,
+        ),
+      }));
+    } catch (err) {
+      console.error('[store] regenerateQuestion failed:', err?.response?.data?.error || err.message);
+      // Don't crash the UI — just clear the spinner
+    } finally {
+      set((prev) => {
+        const ids = new Set(prev.regeneratingIds);
+        ids.delete(questionId);
+        return { regeneratingIds: ids };
+      });
+    }
+  },
 
   approveQuestion: (id) =>
     set((s) => ({

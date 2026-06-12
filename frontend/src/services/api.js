@@ -12,11 +12,26 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+// ── Response interceptor — auto-logout on 401 (expired/stale token) ──────────
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      // Clear the stale token and bounce to login
+      localStorage.removeItem('vg_token');
+      if (!window.location.pathname.includes('/login')) {
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
 // ── Topic API ─────────────────────────────────────────────────────────────────
 export const topicApi = {
   /**
    * POST /api/topics/detect/:projectId
-   * Sends PDF extracted text to GPT-4o / Gemini and returns detected topics.
+   * Sends PDF extracted text to the LLM and returns detected topics.
    */
   detect: (projectId) =>
     api.post(`/topics/detect/${projectId}`).then((r) => r.data),
@@ -42,12 +57,21 @@ export const topicApi = {
 export const questionApi = {
   /**
    * POST /api/questions/generate
-   * Sends teacher config to backend; backend calls GPT-4o → Gemini fallback.
+   * Sends teacher config to backend; backend calls Groq → Gemini fallback.
    * @param {string} projectId
    * @param {{ examInfo, difficultyDistribution, topics[] }} config
    */
   generate: (projectId, config) =>
     api.post('/questions/generate', { projectId, ...config }).then((r) => r.data),
+
+  /**
+   * POST /api/questions/regenerate-single
+   * Asks the LLM to rewrite one question keeping the same type/topic/marks/difficulty.
+   */
+  regenerateSingle: (projectId, questionId, { questionType, topicName, marks, difficulty }) =>
+    api.post('/questions/regenerate-single', {
+      projectId, questionId, questionType, topicName, marks, difficulty,
+    }).then((r) => r.data),
 };
 
 // ── Upload API ────────────────────────────────────────────────────────────────
@@ -76,8 +100,10 @@ export const authApi = {
 
   register: (payload) =>
     api.post('/auth/register', payload).then((r) => r.data),
-};
 
-export const apiService = {
-  async ping() { return { ok: true }; },
-};
+  logout: () =>
+    api.post('/auth/logout').then((r) => r.data).catch(() => {}), // best-effort
+
+  getMe: () =>
+    api.get('/auth/me').then((r) => r.data),
+};

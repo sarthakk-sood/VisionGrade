@@ -39,12 +39,16 @@ const uploadPDFs = async (req, res, next) => {
           isSelected:    true,
         });
 
+        const preview = extractedText
+          ? extractedText.substring(0, 200) + (extractedText.length > 200 ? '…' : '')
+          : '(no text extracted)';
+
         return {
           docId:     doc._id,
           filename:  file.originalname,
           pageCount,
           pdfUrl:    url,
-          extractedTextPreview: extractedText.substring(0, 200) + '...',
+          extractedTextPreview: preview,
         };
       })
     );
@@ -164,4 +168,99 @@ const generateQuestionsHandler = async (req, res, next) => {
   }
 };
 
-module.exports = { uploadPDFs, generateQuestionsHandler };
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/questions/regenerate-single
+//
+// Body: { projectId, questionId, questionType, topicName, marks, difficulty }
+// Regenerates one question in-place and persists it to the project.
+// ─────────────────────────────────────────────────────────────────────────────
+const regenerateSingleHandler = async (req, res, next) => {
+  try {
+    const { projectId, questionId, questionType, topicName, marks, difficulty } = req.body;
+
+    if (!projectId || !questionId) {
+      return res.status(400).json({ success: false, error: 'projectId and questionId are required' });
+    }
+
+    // Load project & verify ownership
+    const project = await Project.findById(projectId);
+    if (!project) {
+      return res.status(404).json({ success: false, error: 'Project not found' });
+    }
+    if (project.teacherId.toString() !== req.teacher._id.toString()) {
+      return res.status(403).json({ success: false, error: 'Not authorised' });
+    }
+
+    // Fetch source documents
+    const SourceDocument = require('../models/sourceDocument');
+    const docs = await SourceDocument.find({ projectId: project._id, isSelected: true });
+    if (!docs || docs.length === 0) {
+      return res.status(400).json({ success: false, error: 'No source documents found for this project.' });
+    }
+    const extractedTexts = docs.map(d => d.extractedText || '').filter(t => t.trim().length > 0);
+    if (extractedTexts.length === 0) {
+      return res.status(400).json({ success: false, error: 'No readable text in uploaded PDFs.' });
+    }
+
+    // Build a minimal config that targets just this one question
+    const qType    = questionType || 'ShortAnswer';
+    const qMarks   = marks        || 5;
+    const qDiff    = difficulty   || 'Medium';
+    const qTopic   = topicName    || 'General';
+
+    const singleConfig = {
+      examInfo: {
+        examTitle:       project.examInfo?.examTitle       || project.title,
+        subject:         project.examInfo?.subject         || project.subject || '',
+        totalMarks:      qMarks,
+        durationMinutes: 90,
+        instructions:    [],
+        questionTypes:   { [qType]: { count: 1, marks: qMarks } },
+      },
+      topics: [{ topicName: qTopic, marks: qMarks, difficulty: qDiff }],
+    };
+
+    console.log(`[questionController] Regenerating single question — type:${qType} topic:${qTopic} marks:${qMarks}`);
+    const result = await generateQuestions(singleConfig, extractedTexts);
+
+    const newQ = result.questions[0];
+    if (!newQ) {
+      return res.status(500).json({ success: false, error: 'LLM returned no question.' });
+    }
+
+    // Patch the existing question in the project document
+    const qIndex = project.generatedQuestions.findIndex(
+      (q) => q._id.toString() === questionId || String(q.id) === String(questionId)
+    );
+    if (qIndex !== -1) {
+      project.generatedQuestions[qIndex] = {
+        ...project.generatedQuestions[qIndex].toObject(),
+        questionText:  newQ.questionText,
+        options:       newQ.options || [],
+        correctAnswer: newQ.correctAnswer,
+        explanation:   newQ.explanation,
+        approved:      false,
+      };
+      await project.save();
+    }
+
+    return res.status(200).json({
+      success: true,
+      question: {
+        questionText:  newQ.questionText,
+        options:       newQ.options || null,
+        correctAnswer: newQ.correctAnswer,
+        explanation:   newQ.explanation,
+        type:          newQ.type,
+        difficulty:    newQ.difficulty,
+        marks:         newQ.marks,
+        topicName:     newQ.topicName,
+      },
+    });
+
+  } catch (err) {
+    next(err);
+  }
+};
+
+module.exports = { uploadPDFs, generateQuestionsHandler, regenerateSingleHandler };

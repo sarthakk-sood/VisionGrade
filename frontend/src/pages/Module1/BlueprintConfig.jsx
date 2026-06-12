@@ -13,6 +13,7 @@ import Button        from '../../components/common/Button';
 import StatusBadge   from '../../components/common/StatusBadge';
 import ProgressBar   from '../../components/common/ProgressBar';
 import { useAppStore } from '../../store/useAppStore';
+import { StepGuard } from '../../hooks/useWorkflow';
 
 const BG = 'bg-[radial-gradient(circle_at_top,rgba(37,99,235,0.12),transparent_22%),linear-gradient(180deg,#020617_0%,#071226_55%,#0f172a_100%)]';
 const M1_STEPS = ['Exam Details', 'Upload PDFs', 'Topics & Weightage', 'Generate Questions', 'Review Questions', 'Export'];
@@ -62,7 +63,8 @@ export default function BlueprintConfig() {
   const total      = questions.length || 1;
 
   return (
-    <div className={`min-h-screen ${BG}`}>
+    <StepGuard step={6}>
+      <div className={`min-h-screen ${BG}`}>
       <Navbar />
       <PageContainer subtitle="Module 1 / Step 6" title="Export Question Paper">
         <div className="flex flex-col gap-6 lg:flex-row">
@@ -209,5 +211,6 @@ export default function BlueprintConfig() {
         </div>
       </PageContainer>
     </div>
+    </StepGuard>
   );
 }

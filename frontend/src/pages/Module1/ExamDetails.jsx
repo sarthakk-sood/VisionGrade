@@ -8,6 +8,8 @@ import PageContainer from '../../components/layout/PageContainer';
 import Stepper       from '../../components/common/Stepper';
 import Card          from '../../components/common/Card';
 import Button        from '../../components/common/Button';
+import { StepGuard } from '../../hooks/useWorkflow';
+import { useAppStore } from '../../store/useAppStore';
 
 const BG = 'bg-[radial-gradient(circle_at_top,rgba(37,99,235,0.12),transparent_22%),linear-gradient(180deg,#020617_0%,#071226_55%,#0f172a_100%)]';
 const M1_STEPS = ['Exam Details', 'Upload PDFs', 'Topics & Weightage', 'Generate Questions', 'Review Questions', 'Export'];
@@ -47,7 +49,9 @@ function ToggleGroup({ options, value, onChange, colorMap = {} }) {
 }
 
 export default function ExamDetails() {
-  const navigate = useNavigate();
+  const navigate      = useNavigate();
+  const completeM1Step = useAppStore((s) => s.completeM1Step);
+  const setExamInfo    = useAppStore((s) => s.setExamInfo);
 
   const [form, setForm] = useState({
     examName: '', subject: '', subjectCode: '',
@@ -68,7 +72,15 @@ export default function ExamDetails() {
   };
 
   const handleContinue = () => {
-    if (validate()) navigate('/module1/upload');
+    if (!validate()) return;
+    // Persist exam info to store so later steps can use it
+    setExamInfo({
+      examTitle:       form.examName,
+      subject:         form.subject,
+      totalMarks:      form.totalMarks,
+    });
+    completeM1Step(1);
+    navigate('/module1/upload');
   };
 
   const diffColor = {
@@ -79,170 +91,95 @@ export default function ExamDetails() {
   };
 
   return (
-    <div className={`min-h-screen ${BG}`}>
-      <Navbar />
-      <PageContainer subtitle="Module 1 / Step 1" title="Exam Details">
-        <div className="flex flex-col gap-6 lg:flex-row">
-          <Sidebar />
-
-          <div className="flex-1 min-w-0">
-            <Stepper steps={M1_STEPS} currentStep={1} />
-
-            <div className="space-y-5">
-              {/* ── Basic Info ── */}
-              <Card>
-                <div className="mb-5">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-blue-400/70">Step 1</p>
-                  <h3 className="mt-1 text-lg font-bold text-white">Basic Exam Information</h3>
-                  <p className="mt-1 text-xs text-slate-500">Configure the fundamental details for your exam session.</p>
+    <StepGuard step={1}>
+      <div className={`min-h-screen ${BG}`}>
+        <Navbar />
+        <PageContainer subtitle="Module 1 / Step 1" title="Exam Details">
+          <div className="flex flex-col gap-6 lg:flex-row">
+            <Sidebar />
+            <div className="flex-1 min-w-0">
+              <Stepper steps={M1_STEPS} currentStep={1} />
+              <div className="space-y-5">
+                {/* ── Basic Info ── */}
+                <Card>
+                  <div className="mb-5">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-blue-400/70">Step 1</p>
+                    <h3 className="mt-1 text-lg font-bold text-white">Basic Exam Information</h3>
+                    <p className="mt-1 text-xs text-slate-500">Configure the fundamental details for your exam session.</p>
+                  </div>
+                  <div className="grid gap-5 sm:grid-cols-2">
+                    <div className="sm:col-span-2">
+                      <label className={LABEL_CLS}>Exam Name *</label>
+                      <input type="text" placeholder="e.g. DBMS Mid Semester Examination 2026" value={form.examName} onChange={(e) => set('examName', e.target.value)} className={INPUT_CLS} />
+                      {errors.examName && <p className="mt-1.5 text-xs text-rose-400">{errors.examName}</p>}
+                    </div>
+                    <div>
+                      <label className={LABEL_CLS}>Subject</label>
+                      <input type="text" placeholder="e.g. Database Management Systems" value={form.subject} onChange={(e) => set('subject', e.target.value)} className={INPUT_CLS} />
+                    </div>
+                    <div>
+                      <label className={LABEL_CLS}>Subject Code</label>
+                      <input type="text" placeholder="e.g. CS401" value={form.subjectCode} onChange={(e) => set('subjectCode', e.target.value)} className={INPUT_CLS} />
+                    </div>
+                    <div>
+                      <label className={LABEL_CLS}>Academic Year</label>
+                      <input type="text" placeholder="e.g. 2025–26" value={form.academicYear} onChange={(e) => set('academicYear', e.target.value)} className={INPUT_CLS} />
+                    </div>
+                    <div>
+                      <label className={LABEL_CLS}>Semester</label>
+                      <select value={form.semester} onChange={(e) => set('semester', e.target.value)} className={`${INPUT_CLS} cursor-pointer`}>
+                        {SEMESTERS.map((s) => <option key={s} value={s} className="bg-[#071226]">{s}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={LABEL_CLS}>Session</label>
+                      <input type="text" placeholder="e.g. Mid Semester 2026" value={form.session} onChange={(e) => set('session', e.target.value)} className={INPUT_CLS} />
+                    </div>
+                    <div>
+                      <label className={LABEL_CLS}>Total Marks *</label>
+                      <input type="number" min="1" placeholder="e.g. 100" value={form.totalMarks} onChange={(e) => set('totalMarks', Number(e.target.value))} className={INPUT_CLS} />
+                      {errors.totalMarks && <p className="mt-1.5 text-xs text-rose-400">{errors.totalMarks}</p>}
+                    </div>
+                  </div>
+                </Card>
+                {/* ── Question Config ── */}
+                <Card>
+                  <div className="mb-5">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-blue-400/70">Configuration</p>
+                    <h3 className="mt-1 text-lg font-bold text-white">Question Type & Difficulty</h3>
+                  </div>
+                  <div className="space-y-6">
+                    <div>
+                      <label className={LABEL_CLS}>Question Type</label>
+                      <ToggleGroup options={Q_TYPES} value={form.questionType} onChange={(v) => set('questionType', v)} />
+                    </div>
+                    <div>
+                      <label className={LABEL_CLS}>Difficulty Level</label>
+                      <ToggleGroup options={DIFFS} value={form.difficulty} onChange={(v) => set('difficulty', v)} colorMap={diffColor} />
+                    </div>
+                  </div>
+                </Card>
+                {/* ── Preview chip ── */}
+                {form.examName && (
+                  <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="flex flex-wrap items-center gap-2 rounded-2xl border border-blue-400/15 bg-blue-500/8 px-4 py-3">
+                    <ClipboardList className="h-4 w-4 text-blue-300" />
+                    <p className="text-xs font-semibold text-white">{form.examName}</p>
+                    {form.totalMarks > 0 && <span className="rounded-full bg-white/[0.08] px-2 py-0.5 text-[10px] text-slate-400">{form.totalMarks} marks</span>}
+                    {form.questionType && <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-[10px] text-blue-300">{form.questionType}</span>}
+                  </motion.div>
+                )}
+                {/* ── Actions ── */}
+                <div className="flex items-center justify-between pt-1">
+                  <Button variant="ghost" onClick={() => navigate('/dashboard')}>Cancel</Button>
+                  <Button onClick={handleContinue} icon={<ArrowRight className="h-4 w-4" />}>
+                    Continue to Upload PDFs
+                  </Button>
                 </div>
-
-                <div className="grid gap-5 sm:grid-cols-2">
-                  <div className="sm:col-span-2">
-                    <label className={LABEL_CLS}>Exam Name *</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. DBMS Mid Semester Examination 2026"
-                      value={form.examName}
-                      onChange={(e) => set('examName', e.target.value)}
-                      className={INPUT_CLS}
-                    />
-                    {errors.examName && <p className="mt-1.5 text-xs text-rose-400">{errors.examName}</p>}
-                  </div>
-
-                  <div>
-                    <label className={LABEL_CLS}>Subject</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Database Management Systems"
-                      value={form.subject}
-                      onChange={(e) => set('subject', e.target.value)}
-                      className={INPUT_CLS}
-                    />
-                  </div>
-
-                  <div>
-                    <label className={LABEL_CLS}>Subject Code</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. CS401"
-                      value={form.subjectCode}
-                      onChange={(e) => set('subjectCode', e.target.value)}
-                      className={INPUT_CLS}
-                    />
-                  </div>
-
-                  <div>
-                    <label className={LABEL_CLS}>Academic Year</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. 2025–26"
-                      value={form.academicYear}
-                      onChange={(e) => set('academicYear', e.target.value)}
-                      className={INPUT_CLS}
-                    />
-                  </div>
-
-                  <div>
-                    <label className={LABEL_CLS}>Semester</label>
-                    <select
-                      value={form.semester}
-                      onChange={(e) => set('semester', e.target.value)}
-                      className={`${INPUT_CLS} cursor-pointer`}
-                    >
-                      {SEMESTERS.map((s) => (
-                        <option key={s} value={s} className="bg-[#071226]">{s}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className={LABEL_CLS}>Session</label>
-                    <input
-                      type="text"
-                      placeholder="e.g. Mid Semester 2026"
-                      value={form.session}
-                      onChange={(e) => set('session', e.target.value)}
-                      className={INPUT_CLS}
-                    />
-                  </div>
-
-                  <div>
-                    <label className={LABEL_CLS}>Total Marks *</label>
-                    <input
-                      type="number"
-                      min="1"
-                      placeholder="e.g. 100"
-                      value={form.totalMarks}
-                      onChange={(e) => set('totalMarks', Number(e.target.value))}
-                      className={INPUT_CLS}
-                    />
-                    {errors.totalMarks && <p className="mt-1.5 text-xs text-rose-400">{errors.totalMarks}</p>}
-                  </div>
-                </div>
-              </Card>
-
-              {/* ── Question Config ── */}
-              <Card>
-                <div className="mb-5">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-blue-400/70">Configuration</p>
-                  <h3 className="mt-1 text-lg font-bold text-white">Question Type & Difficulty</h3>
-                </div>
-
-                <div className="space-y-6">
-                  <div>
-                    <label className={LABEL_CLS}>Question Type</label>
-                    <ToggleGroup
-                      options={Q_TYPES}
-                      value={form.questionType}
-                      onChange={(v) => set('questionType', v)}
-                    />
-                  </div>
-                  <div>
-                    <label className={LABEL_CLS}>Difficulty Level</label>
-                    <ToggleGroup
-                      options={DIFFS}
-                      value={form.difficulty}
-                      onChange={(v) => set('difficulty', v)}
-                      colorMap={diffColor}
-                    />
-                  </div>
-                </div>
-              </Card>
-
-              {/* ── Preview chip ── */}
-              {form.examName && (
-                <motion.div
-                  initial={{ opacity: 0, y: 6 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  className="flex flex-wrap items-center gap-2 rounded-2xl border border-blue-400/15 bg-blue-500/8 px-4 py-3"
-                >
-                  <ClipboardList className="h-4 w-4 text-blue-300" />
-                  <p className="text-xs font-semibold text-white">{form.examName}</p>
-                  {form.totalMarks > 0 && (
-                    <span className="rounded-full bg-white/[0.08] px-2 py-0.5 text-[10px] text-slate-400">
-                      {form.totalMarks} marks
-                    </span>
-                  )}
-                  {form.questionType && (
-                    <span className="rounded-full bg-blue-500/20 px-2 py-0.5 text-[10px] text-blue-300">
-                      {form.questionType}
-                    </span>
-                  )}
-                </motion.div>
-              )}
-
-              {/* ── Actions ── */}
-              <div className="flex items-center justify-between pt-1">
-                <Button variant="ghost" onClick={() => navigate('/dashboard')}>Cancel</Button>
-                <Button onClick={handleContinue} icon={<ArrowRight className="h-4 w-4" />}>
-                  Continue to Upload PDFs
-                </Button>
               </div>
             </div>
           </div>
-        </div>
-      </PageContainer>
-    </div>
+        </PageContainer>
+      </div>
+    </StepGuard>
   );
 }

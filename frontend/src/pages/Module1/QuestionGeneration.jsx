@@ -14,6 +14,7 @@ import Card          from '../../components/common/Card';
 import Button        from '../../components/common/Button';
 import ProgressBar   from '../../components/common/ProgressBar';
 import { useAppStore } from '../../store/useAppStore';
+import { StepGuard } from '../../hooks/useWorkflow';
 
 const BG = 'bg-[radial-gradient(circle_at_top,rgba(37,99,235,0.12),transparent_22%),linear-gradient(180deg,#020617_0%,#071226_55%,#0f172a_100%)]';
 const M1_STEPS = ['Exam Details', 'Upload PDFs', 'Topics & Weightage', 'Generate Questions', 'Review Questions', 'Export'];
@@ -51,6 +52,7 @@ export default function QuestionGeneration() {
   const setExamInfo                 = useAppStore((s) => s.setExamInfo);
   const setQuestionType             = useAppStore((s) => s.setQuestionType);
   const generateQuestionsFromBackend = useAppStore((s) => s.generateQuestionsFromBackend);
+  const completeM1Step              = useAppStore((s) => s.completeM1Step);
 
   const [stageIdx, setStageIdx]   = useState(0);
   const [progress, setProgress]   = useState(0);
@@ -97,6 +99,7 @@ export default function QuestionGeneration() {
       setProgress(100);
       setStageIdx(GENERATION_STAGES.length - 1);
       setDone(true);
+      completeM1Step(4);
       setTimeout(() => navigate('/module1/review'), 1200);
     } else {
       setProgress(0);
@@ -104,7 +107,8 @@ export default function QuestionGeneration() {
   };
 
   return (
-    <div className={`min-h-screen ${BG}`}>
+    <StepGuard step={4}>
+      <div className={`min-h-screen ${BG}`}>
       <Navbar />
       <PageContainer subtitle="Module 1 / Step 4" title="Generate Questions">
         <div className="flex flex-col gap-6 lg:flex-row">
@@ -346,5 +350,6 @@ export default function QuestionGeneration() {
         </div>
       </PageContainer>
     </div>
+    </StepGuard>
   );
 }

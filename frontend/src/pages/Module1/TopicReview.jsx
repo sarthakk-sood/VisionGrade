@@ -14,6 +14,7 @@ import Card          from '../../components/common/Card';
 import Button        from '../../components/common/Button';
 import StatusBadge   from '../../components/common/StatusBadge';
 import { useAppStore } from '../../store/useAppStore';
+import { StepGuard } from '../../hooks/useWorkflow';
 
 const BG = 'bg-[radial-gradient(circle_at_top,rgba(37,99,235,0.12),transparent_22%),linear-gradient(180deg,#020617_0%,#071226_55%,#0f172a_100%)]';
 const M1_STEPS = ['Exam Details', 'Upload PDFs', 'Topics & Weightage', 'Generate Questions', 'Review Questions', 'Export'];
@@ -44,6 +45,7 @@ export default function TopicReview() {
   const saveTopicSelection      = useAppStore((s) => s.saveTopicSelection);
   const detectTopicsFromBackend = useAppStore((s) => s.detectTopicsFromBackend);
   const updateTopicConfig       = useAppStore((s) => s.updateTopicConfig);
+  const completeM1Step          = useAppStore((s) => s.completeM1Step);
 
   const [expandedId, setExpandedId]   = useState(null);
   const [isSaving, setIsSaving]       = useState(false);
@@ -86,13 +88,15 @@ export default function TopicReview() {
 
   const handleContinue = async () => {
     if (projectId && !topicsSaved) await saveTopicSelection(projectId);
+    completeM1Step(3);
     navigate('/module1/generate');
   };
 
   // ── Loading state ──────────────────────────────────────────────────────────
   if (topicsLoading) {
     return (
-      <div className={`min-h-screen ${BG}`}>
+      <StepGuard step={3}>
+        <div className={`min-h-screen ${BG}`}>
         <Navbar />
         <PageContainer subtitle="Module 1 / Step 3" title="Topics & Weightage">
           <div className="flex flex-col gap-6 lg:flex-row">
@@ -119,11 +123,13 @@ export default function TopicReview() {
           </div>
         </PageContainer>
       </div>
+      </StepGuard>
     );
   }
 
   return (
-    <div className={`min-h-screen ${BG}`}>
+    <StepGuard step={3}>
+      <div className={`min-h-screen ${BG}`}>
       <Navbar />
       <PageContainer subtitle="Module 1 / Step 3" title="Topics & Weightage">
         <div className="flex flex-col gap-6 lg:flex-row">
@@ -400,5 +406,6 @@ export default function TopicReview() {
         </div>
       </PageContainer>
     </div>
+    </StepGuard>
   );
 }
