@@ -15,8 +15,8 @@ import Button        from '../../components/common/Button';
 import ProgressBar   from '../../components/common/ProgressBar';
 import { useAppStore } from '../../store/useAppStore';
 import { StepGuard } from '../../hooks/useWorkflow';
+import { PAGE_BG } from '../../utils/theme';
 
-const BG = 'bg-[radial-gradient(circle_at_top,rgba(37,99,235,0.12),transparent_22%),linear-gradient(180deg,#020617_0%,#071226_55%,#0f172a_100%)]';
 const M1_STEPS = ['Exam Details', 'Upload PDFs', 'Topics & Weightage', 'Generate Questions', 'Review Questions', 'Export'];
 
 const GENERATION_STAGES = [
@@ -32,6 +32,7 @@ const GENERATION_STAGES = [
 
 const PROVIDER_LABELS = {
   'gpt-4o':                'GPT-4o',
+  'groq-llama-3.1-8b':     'Groq Llama 3.1',
   'gemini-2.5-flash':      'Gemini 2.5 Flash',
   'gemini-2.0-flash-lite': 'Gemini 2.0 Flash Lite',
 };
@@ -108,7 +109,7 @@ export default function QuestionGeneration() {
 
   return (
     <StepGuard step={4}>
-      <div className={`min-h-screen ${BG}`}>
+      <div className={PAGE_BG}>
       <Navbar />
       <PageContainer subtitle="Module 1 / Step 4" title="Generate Questions">
         <div className="flex flex-col gap-6 lg:flex-row">
@@ -124,8 +125,8 @@ export default function QuestionGeneration() {
 
                 {/* Exam Info */}
                 <Card>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-blue-400/70">Exam Information</p>
-                  <h3 className="mt-1 text-base font-bold text-white">Paper Details</h3>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500">Exam Information</p>
+                  <h3 className="mt-1 text-base font-bold text-slate-900">Paper Details</h3>
 
                   <div className="mt-4 space-y-4">
                     {/* Exam Title */}
@@ -138,7 +139,7 @@ export default function QuestionGeneration() {
                         value={examInfo.examTitle}
                         onChange={(e) => setExamInfo({ examTitle: e.target.value })}
                         placeholder="e.g. Mid Semester Examination — Data Structures"
-                        className="mt-2 w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-sm text-white placeholder-slate-600 outline-none focus:border-blue-400/40 transition"
+                        className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-sm text-slate-900 placeholder-slate-600 outline-none focus:border-blue-400/40 transition"
                       />
                     </div>
 
@@ -150,7 +151,7 @@ export default function QuestionGeneration() {
                           type="text"
                           readOnly
                           value={examInfo.totalMarks}
-                          className="mt-2 w-full rounded-xl border border-white/[0.08] bg-white/[0.02] px-4 py-2.5 text-xl font-black text-slate-400 outline-none cursor-not-allowed"
+                          className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xl font-black text-slate-500 outline-none cursor-not-allowed"
                         />
                       </div>
                       {/* Duration */}
@@ -162,7 +163,7 @@ export default function QuestionGeneration() {
                           type="number" min="30" max="300"
                           value={examInfo.durationMinutes}
                           onChange={(e) => setExamInfo({ durationMinutes: Number(e.target.value) })}
-                          className="mt-2 w-full rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2.5 text-xl font-black text-white outline-none focus:border-blue-400/40 transition"
+                          className="mt-2 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-xl font-black text-slate-900 outline-none focus:border-blue-400/40 transition"
                         />
                       </div>
                     </div>
@@ -171,10 +172,10 @@ export default function QuestionGeneration() {
 
                 {/* Overall Question Types Distribution */}
                 <Card>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-blue-400/70">Question Blueprint</p>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500">Question Blueprint</p>
                   <div className="flex items-center justify-between">
-                    <h3 className="mt-1 text-base font-bold text-white">Overall Question Distribution</h3>
-                    <div className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full border ${isMarksValid ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'}`}>
+                    <h3 className="mt-1 text-base font-bold text-slate-900">Overall Question Distribution</h3>
+                    <div className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full border ${isMarksValid ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-rose-50 text-rose-400 border-rose-500/20'}`}>
                       {isMarksValid ? <CheckCircle2 className="h-3.5 w-3.5" /> : <AlertCircle className="h-3.5 w-3.5" />}
                       Marks: {totalQuestionMarks} / {examInfo.totalMarks}
                     </div>
@@ -196,24 +197,24 @@ export default function QuestionGeneration() {
                       const total = data.count * data.marks;
                       
                       return (
-                        <div key={qt} className="grid grid-cols-[1fr_100px_100px_80px] gap-3 items-center rounded-xl border border-white/[0.04] bg-white/[0.02] p-2 hover:bg-white/[0.04] transition">
-                          <span className="text-sm font-semibold text-slate-300 ml-2">{TYPE_LABELS[qt]}</span>
+                        <div key={qt} className="grid grid-cols-[1fr_100px_100px_80px] gap-3 items-center rounded-xl border border-slate-100 bg-slate-50 p-2 hover:bg-slate-50 transition">
+                          <span className="text-sm font-semibold text-slate-600 ml-2">{TYPE_LABELS[qt]}</span>
                           
                           <input
                             type="number" min="0" max="50"
                             value={data.count || 0}
                             onChange={(e) => setQuestionType(qt, { count: Number(e.target.value) })}
-                            className="rounded-lg border border-white/[0.08] bg-white/[0.05] px-3 py-1.5 text-center text-sm font-bold text-white outline-none focus:border-blue-400/40"
+                            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-center text-sm font-bold text-slate-900 outline-none focus:border-blue-400/40"
                           />
                           
                           <input
                             type="number" min="1" max="50"
                             value={data.marks || 1}
                             onChange={(e) => setQuestionType(qt, { marks: Number(e.target.value) })}
-                            className="rounded-lg border border-white/[0.08] bg-white/[0.05] px-3 py-1.5 text-center text-sm font-bold text-white outline-none focus:border-blue-400/40"
+                            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-1.5 text-center text-sm font-bold text-slate-900 outline-none focus:border-blue-400/40"
                           />
                           
-                          <span className={`text-right font-black ${total > 0 ? 'text-blue-400' : 'text-slate-600'} mr-2`}>
+                          <span className={`text-right font-black ${total > 0 ? 'text-blue-600' : 'text-slate-600'} mr-2`}>
                             {total}
                           </span>
                         </div>
@@ -232,10 +233,10 @@ export default function QuestionGeneration() {
                   className={[
                     'w-full rounded-xl px-6 py-4 text-sm font-bold transition-all',
                     questionsLoading
-                      ? 'cursor-not-allowed bg-blue-500/20 text-blue-300'
+                      ? 'cursor-not-allowed bg-blue-100 text-blue-600'
                       : done
-                        ? 'bg-gradient-to-r from-emerald-600 to-emerald-500 text-white shadow-lg shadow-emerald-500/20'
-                        : 'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 disabled:opacity-50 disabled:cursor-not-allowed',
+                        ? 'bg-gradient-to-r from-emerald-600 to-emerald-500 text-slate-900 shadow-lg shadow-emerald-500/20'
+                        : 'bg-gradient-to-r from-blue-600 to-blue-500 text-slate-900 shadow-lg shadow-blue-500/25 hover:shadow-blue-500/40 disabled:opacity-50 disabled:cursor-not-allowed',
                   ].join(' ')}
                 >
                   {questionsLoading ? (
@@ -251,10 +252,10 @@ export default function QuestionGeneration() {
                 <AnimatePresence>
                   {questionsError && (
                     <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                      className="flex items-start gap-3 rounded-2xl border border-rose-500/20 bg-rose-500/10 p-4"
+                      className="flex items-start gap-3 rounded-2xl border border-rose-500/20 bg-rose-50 p-4"
                     >
                       <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-rose-400" />
-                      <p className="text-xs text-rose-300">{questionsError}</p>
+                      <p className="text-xs text-rose-600">{questionsError}</p>
                     </motion.div>
                   )}
                 </AnimatePresence>
@@ -267,16 +268,16 @@ export default function QuestionGeneration() {
                 <motion.div
                   animate={{ y: [0, -5, 0] }}
                   transition={{ duration: 5, repeat: Infinity, ease: 'easeInOut' }}
-                  className="rounded-2xl border border-blue-400/20 bg-blue-500/[0.06] p-5"
+                  className="rounded-2xl border border-blue-200 bg-blue-500/[0.06] p-5"
                 >
-                  <div className="flex items-center gap-2 text-blue-200">
+                  <div className="flex items-center gap-2 text-blue-600">
                     <Sparkles className="h-4 w-4" />
                     <p className="text-sm font-semibold">VisionGrade AI</p>
-                    <span className="ml-auto rounded-full bg-blue-500/20 px-2.5 py-0.5 text-[10px] font-bold text-blue-300">
+                    <span className="ml-auto rounded-full bg-blue-100 px-2.5 py-0.5 text-[10px] font-bold text-blue-600">
                       {generationProvider ? PROVIDER_LABELS[generationProvider] || generationProvider : 'GPT-4o → Gemini fallback'}
                     </span>
                   </div>
-                  <p className="mt-3 text-xs leading-6 text-slate-300">
+                  <p className="mt-3 text-xs leading-6 text-slate-600">
                     {done
                       ? `${generatedQuestions.length} questions generated successfully across ${selectedTopics.length} topic(s).`
                       : `The LLM will intelligently assign the ${totalQuestionCount} required global questions to the ${selectedTopics.length} topics while respecting each topic's allocated marks.`}
@@ -290,18 +291,18 @@ export default function QuestionGeneration() {
                       initial={{ opacity: 0, y: 8 }}
                       animate={{ opacity: 1, y: 0 }}
                       exit={{ opacity: 0 }}
-                      className="rounded-2xl border border-blue-400/20 bg-blue-500/[0.06] p-5"
+                      className="rounded-2xl border border-blue-200 bg-blue-500/[0.06] p-5"
                     >
                       <div className="mb-3 flex items-center gap-2">
                         {questionsLoading
-                          ? <Loader2 className="h-4 w-4 animate-spin text-blue-300" />
-                          : <CheckCircle2 className="h-4 w-4 text-emerald-300" />}
-                        <p className="text-xs font-semibold text-blue-200">
+                          ? <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                          : <CheckCircle2 className="h-4 w-4 text-emerald-700" />}
+                        <p className="text-xs font-semibold text-blue-600">
                           {questionsLoading ? 'AI Processing…' : 'Generation Complete!'}
                         </p>
                       </div>
                       <ProgressBar value={progress} tone={done ? 'emerald' : 'blue'} />
-                      <p className="mt-2 text-[10px] text-slate-400">
+                      <p className="mt-2 text-[10px] text-slate-500">
                         {done ? `${generatedQuestions.length} questions ready — navigating to review…` : GENERATION_STAGES[stageIdx]}
                       </p>
                     </motion.div>
@@ -310,8 +311,8 @@ export default function QuestionGeneration() {
 
                 {/* Topic Blueprint Summary */}
                 <Card>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-blue-400/70">Topic Blueprint</p>
-                  <h3 className="mt-1 text-sm font-bold text-white">Configured Topics</h3>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500">Topic Blueprint</p>
+                  <h3 className="mt-1 text-sm font-bold text-slate-900">Configured Topics</h3>
 
                   <div className="mt-4 space-y-3">
                     {selectedTopics.length === 0 ? (
@@ -322,8 +323,8 @@ export default function QuestionGeneration() {
                         return (
                           <div key={t.id}>
                             <div className="mb-1 flex justify-between text-xs">
-                              <span className="truncate text-slate-400 max-w-[140px]">{t.name}</span>
-                              <span className="shrink-0 font-semibold text-white">{t.difficulty || 'Mixed'} · {t.marks || 0}m</span>
+                              <span className="truncate text-slate-500 max-w-[140px]">{t.name}</span>
+                              <span className="shrink-0 font-semibold text-slate-900">{t.difficulty || 'Mixed'} · {t.marks || 0}m</span>
                             </div>
                             <ProgressBar value={pct} showValue={false} height="h-1" tone="blue" />
                           </div>

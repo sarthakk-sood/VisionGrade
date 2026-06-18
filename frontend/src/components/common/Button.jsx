@@ -3,11 +3,11 @@ import { motion } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
 
 const variantClasses = {
-  primary:   'bg-gradient-to-r from-blue-600 to-blue-500 text-white shadow-lg shadow-blue-500/20 hover:from-blue-500 hover:to-blue-400 hover:shadow-blue-500/35',
-  secondary: 'border border-white/10 bg-white/[0.06] text-white hover:bg-white/[0.10] hover:border-white/18',
-  ghost:     'bg-transparent text-slate-300 hover:bg-white/[0.06] hover:text-white',
-  danger:    'bg-gradient-to-r from-rose-600 to-rose-500 text-white shadow-lg shadow-rose-500/20 hover:shadow-rose-500/35',
-  success:   'bg-gradient-to-r from-emerald-600 to-emerald-500 text-white shadow-lg shadow-emerald-500/20',
+  primary:   'bg-blue-600 text-white shadow-sm hover:bg-blue-700 hover:shadow-md',
+  secondary: 'border border-slate-300 bg-white text-slate-700 hover:bg-slate-50 hover:border-slate-400',
+  ghost:     'bg-transparent text-slate-600 hover:bg-slate-100 hover:text-slate-900',
+  danger:    'bg-rose-600 text-white shadow-sm hover:bg-rose-700',
+  success:   'bg-emerald-600 text-white shadow-sm hover:bg-emerald-700',
 };
 
 const sizeClasses = {
@@ -29,8 +29,8 @@ export default function Button({
   ...props
 }) {
   const classes = [
-    'inline-flex items-center justify-center rounded-xl font-semibold transition-all duration-200',
-    'focus:outline-none focus:ring-2 focus:ring-blue-400/50 focus:ring-offset-0',
+    'inline-flex items-center justify-center rounded-lg font-semibold transition-all duration-200',
+    'focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:ring-offset-2 focus:ring-offset-white',
     'disabled:opacity-50 disabled:cursor-not-allowed',
     variantClasses[variant] ?? variantClasses.primary,
     sizeClasses[size]       ?? sizeClasses.md,
@@ -45,8 +45,8 @@ export default function Button({
   );
 
   const motion$ = {
-    whileHover: !disabled && !loading ? { y: -1, scale: 1.01 } : undefined,
-    whileTap:   !disabled && !loading ? { scale: 0.98 }         : undefined,
+    whileHover: !disabled && !loading ? { y: -1 } : undefined,
+    whileTap:   !disabled && !loading ? { scale: 0.98 } : undefined,
     transition: { duration: 0.14 },
   };
 

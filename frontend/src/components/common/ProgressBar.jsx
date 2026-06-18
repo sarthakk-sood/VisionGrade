@@ -22,8 +22,8 @@ export default function ProgressBar({
     <div className="w-full">
       {(label || showValue) && (
         <div className="mb-1.5 flex items-center justify-between">
-          {label && <span className="text-xs font-medium text-slate-400">{label}</span>}
-          {showValue && <span className="text-xs font-semibold tabular-nums text-slate-300">{pct}%</span>}
+          {label && <span className="text-xs font-medium text-slate-500">{label}</span>}
+          {showValue && <span className="text-xs font-semibold tabular-nums text-slate-600">{pct}%</span>}
         </div>
       )}
       <div className={`w-full overflow-hidden rounded-full bg-white/[0.07] ${height}`}>

@@ -1,5 +1,12 @@
 const OpenAI = require('openai');
 const { GoogleGenAI } = require('@google/genai');
+const {
+  GROQ_GENERATION_INPUT_CHARS,
+  isQuotaError,
+  parseGeminiRetryDelay,
+  sleep,
+  truncateDocuments,
+} = require('../utils/llmUtils');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Lazy clients
@@ -83,19 +90,12 @@ Return ONLY valid JSON — no markdown fences, no prose:
 // ─────────────────────────────────────────────────────────────────────────────
 // Build the structured user prompt from teacher's config
 // ─────────────────────────────────────────────────────────────────────────────
-const MAX_CHARS_CONTEXT = 60_000;
-
 const buildGenerationPrompt = (config, extractedTexts) => {
   const { examInfo, topics } = config;
 
-  // Truncate source text to stay within context limits
-  const combined = extractedTexts
-    .map((t, i) => {
-      const truncated = t.length > MAX_CHARS_CONTEXT / extractedTexts.length
-        ? t.slice(0, Math.floor(MAX_CHARS_CONTEXT / extractedTexts.length)) + '\n[...truncated...]'
-        : t;
-      return `=== SOURCE DOCUMENT ${i + 1} ===\n${truncated}`;
-    })
+  const truncatedTexts = truncateDocuments(extractedTexts, GROQ_GENERATION_INPUT_CHARS);
+  const combined = truncatedTexts
+    .map((t, i) => `=== SOURCE DOCUMENT ${i + 1} ===\n${t}`)
     .join('\n\n');
 
   // Build global question types specification
@@ -186,7 +186,7 @@ const generateWithGroq = async (config, extractedTexts) => {
   const response = await groq.chat.completions.create({
     model: 'llama-3.1-8b-instant',
     temperature: 0.4,       // slightly higher for creative question wording
-    max_tokens: 8192,       // questions can be long
+    max_tokens: 4096,
     response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: QUESTION_GENERATION_SYSTEM_PROMPT },
@@ -211,20 +211,7 @@ const generateWithGroq = async (config, extractedTexts) => {
 // ─────────────────────────────────────────────────────────────────────────────
 // Gemini fallback provider
 // ─────────────────────────────────────────────────────────────────────────────
-const isQuotaError = (err) => {
-  const msg = err?.message || '';
-  const status = err?.status || err?.statusCode || 0;
-  return status === 429 || status === 413 || msg.includes('429') || msg.includes('413') || msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('limit');
-};
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-const parseGeminiRetryDelay = (errMsg) => {
-  const match = errMsg.match(/retry in\s+([\d.]+)s/i);
-  return match ? Math.ceil(parseFloat(match[1]) * 1000) + 1000 : 45_000;
-};
-
-const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash-lite'];
+const GEMINI_MODELS = ['gemini-2.0-flash-lite', 'gemini-2.5-flash'];
 
 const generateWithGemini = async (config, extractedTexts) => {
   const ai = getGemini();
@@ -233,7 +220,7 @@ const generateWithGemini = async (config, extractedTexts) => {
 
   let lastErr;
   for (const modelName of GEMINI_MODELS) {
-    for (let attempt = 0; attempt < 2; attempt++) {
+    for (let attempt = 0; attempt < 3; attempt++) {
       try {
         console.log(`[questionGenerationService] Trying Gemini ${modelName} (attempt ${attempt + 1})…`);
         const result = await ai.models.generateContent({ model: modelName, contents: fullPrompt });
@@ -243,11 +230,9 @@ const generateWithGemini = async (config, extractedTexts) => {
       } catch (err) {
         lastErr = err;
         if (!isQuotaError(err)) throw err;
-        if (attempt === 0) {
-          const delayMs = parseGeminiRetryDelay(err.message);
-          console.warn(`[questionGenerationService] ${modelName} rate-limited, waiting ${Math.round(delayMs / 1000)}s…`);
-          await sleep(delayMs);
-        }
+        const delayMs = parseGeminiRetryDelay(err.message, attempt);
+        console.warn(`[questionGenerationService] ${modelName} unavailable/rate-limited, waiting ${Math.round(delayMs / 1000)}s…`);
+        await sleep(delayMs);
       }
     }
     console.warn(`[questionGenerationService] ${modelName} exhausted, trying next model…`);

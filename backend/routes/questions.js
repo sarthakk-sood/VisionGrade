@@ -1,15 +1,27 @@
 const express = require('express');
 const router = express.Router();
-const { uploadPDFs, generateQuestionsHandler, regenerateSingleHandler } = require('../controllers/questionController');
+const {
+  uploadPDFs,
+  generateQuestionsHandler,
+  regenerateSingleHandler,
+  getProjectQuestions,
+  updateQuestionHandler,
+  addQuestionHandler,
+  deleteQuestionHandler,
+  approveSelectionHandler,
+} = require('../controllers/questionController');
 const { protect } = require('../middleware/authMiddleware');
 
 router.post('/upload-pdfs', protect, uploadPDFs);
 router.post('/upload-pdf',  protect, uploadPDFs);  // legacy alias
 
-// Generate questions from teacher config + LLM
 router.post('/generate', protect, generateQuestionsHandler);
-
-// Regenerate a single question in-place
 router.post('/regenerate-single', protect, regenerateSingleHandler);
 
-module.exports = router;
+router.get('/list/:projectId', protect, getProjectQuestions);
+router.patch('/:projectId/approve-selection', protect, approveSelectionHandler);
+router.post('/:projectId/add', protect, addQuestionHandler);
+router.patch('/:projectId/:questionId', protect, updateQuestionHandler);
+router.delete('/:projectId/:questionId', protect, deleteQuestionHandler);
+
+module.exports = router;

@@ -22,6 +22,7 @@ backend/*.log
 backend/logs/
 
 # Local temp files
+backend/tmp/
 .DS_Store
 Thumbs.db
 *.tmp

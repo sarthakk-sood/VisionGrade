@@ -12,4 +12,9 @@ router.post('/login', login);
 // GET /api/auth/me  (protected)
 router.get('/me', protect, getMe);
 
+// POST /api/auth/logout — client clears JWT locally; no server-side session store
+router.post('/logout', (_req, res) => {
+  res.json({ success: true, message: 'Logged out' });
+});
+
 module.exports = router;

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
@@ -12,13 +12,13 @@ import Card          from '../components/common/Card';
 import Button        from '../components/common/Button';
 import StatusBadge   from '../components/common/StatusBadge';
 import EmptyState    from '../components/common/EmptyState';
+import { PAGE_BG } from '../utils/theme';
 
 const STATUS_TONE = {
   Evaluated: 'success', Exported: 'success',
   Evaluating: 'warning', Generated: 'info', Draft: 'neutral',
 };
 
-const BG = 'bg-[radial-gradient(circle_at_top,rgba(37,99,235,0.12),transparent_22%),linear-gradient(180deg,#020617_0%,#071226_55%,#0f172a_100%)]';
 
 function formatDate(d) {
   if (!d) return '—';
@@ -27,24 +27,23 @@ function formatDate(d) {
 
 export default function SessionsPage() {
   const examSessions = useAppStore((s) => s.examSessions);
+  const loadSessionsFromBackend = useAppStore((s) => s.loadSessionsFromBackend);
+  const sessionsLoading = useAppStore((s) => s.sessionsLoading);
   const navigate = useNavigate();
 
+  useEffect(() => {
+    loadSessionsFromBackend();
+  }, [loadSessionsFromBackend]);
+
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('All'); // All, Evaluated, Pending
 
   let filtered = examSessions.filter((s) =>
     s.examName.toLowerCase().includes(search.toLowerCase()) ||
-    s.subject.toLowerCase().includes(search.toLowerCase())
+    (s.subject || '').toLowerCase().includes(search.toLowerCase())
   );
 
-  if (filter === 'Evaluated') {
-    filtered = filtered.filter(s => s.studentsEvaluated > 0);
-  } else if (filter === 'Pending') {
-    filtered = filtered.filter(s => !s.studentsEvaluated);
-  }
-
   return (
-    <div className={`min-h-screen ${BG}`}>
+    <div className={PAGE_BG}>
       <Navbar />
       <PageContainer
         subtitle="SESSION MANAGEMENT"
@@ -69,41 +68,37 @@ export default function SessionsPage() {
                   placeholder="Search sessions by name or subject..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
-                  className="w-full rounded-xl border border-white/[0.08] bg-white/[0.04] py-2.5 pl-9 pr-4 text-sm text-white placeholder-slate-600 focus:border-blue-400/40 focus:outline-none focus:ring-1 focus:ring-blue-400/20 transition"
+                  className="w-full rounded-xl border border-slate-200 bg-slate-50 py-2.5 pl-9 pr-4 text-sm text-slate-900 placeholder-slate-600 focus:border-blue-400/40 focus:outline-none focus:ring-1 focus:ring-blue-200 transition"
                 />
               </div>
 
-              <div className="flex items-center gap-2">
-                {['All', 'Pending', 'Evaluated'].map((f) => (
-                  <button
-                    key={f}
-                    onClick={() => setFilter(f)}
-                    className={`rounded-xl border px-4 py-2 text-xs font-semibold transition ${
-                      filter === f
-                        ? 'border-blue-400/30 bg-blue-500/15 text-blue-200'
-                        : 'border-white/[0.08] bg-white/[0.04] text-slate-400 hover:bg-white/[0.08]'
-                    }`}
-                  >
-                    {f}
-                  </button>
-                ))}
-              </div>
+              <p className="shrink-0 text-xs text-slate-500">
+                {filtered.length} session{filtered.length !== 1 ? 's' : ''}
+              </p>
             </div>
 
-            {/* ── Sessions List ── */}
             <Card p="p-0" hover={false}>
-              <div className="flex items-center justify-between border-b border-white/[0.06] px-5 py-4">
+              <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
                 <div>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-blue-400/70">Library</p>
-                  <h3 className="mt-0.5 text-sm font-bold text-white">Exam Sessions</h3>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500">Library</p>
+                  <h3 className="mt-0.5 text-sm font-bold text-slate-900">Exam Sessions</h3>
                 </div>
-                <span className="rounded-full bg-white/[0.06] px-2.5 py-1 text-[10px] font-semibold text-slate-400">
+                <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold text-slate-500">
                   {filtered.length} total
                 </span>
               </div>
 
-              {filtered.length === 0 ? (
-                <EmptyState icon={FileText} title="No sessions found" description="Try a different search term or filter." />
+              {sessionsLoading ? (
+                <div className="px-5 py-12 text-center text-sm text-slate-500">Loading sessions…</div>
+              ) : examSessions.length === 0 ? (
+                <EmptyState
+                  icon={FileText}
+                  title="No exam sessions yet"
+                  description="Finalize a question paper to create your first session."
+                  action={<Button to="/module1/exam-details" size="sm">Start Module 1</Button>}
+                />
+              ) : filtered.length === 0 ? (
+                <EmptyState icon={FileText} title="No matches" description="Try a different search term." />
               ) : (
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">
@@ -111,8 +106,8 @@ export default function SessionsPage() {
                       <tr>
                         <th className="px-5 py-3 font-semibold">Exam Name & Subject</th>
                         <th className="px-4 py-3 font-semibold">Paper Details</th>
-                        <th className="px-4 py-3 font-semibold">Evaluation Status</th>
-                        <th className="px-4 py-3 font-semibold">Date Created</th>
+                        <th className="px-4 py-3 font-semibold">Answer Key</th>
+                        <th className="px-4 py-3 font-semibold">Date</th>
                         <th className="px-4 py-3 font-semibold text-right">Status</th>
                       </tr>
                     </thead>
@@ -124,27 +119,28 @@ export default function SessionsPage() {
                           animate={{ opacity: 1 }}
                           transition={{ delay: i * 0.04 }}
                           onClick={() => navigate(`/session/${s.id}`)}
-                          className="cursor-pointer border-t border-white/[0.05] transition hover:bg-white/[0.04]"
+                          className="cursor-pointer border-t border-slate-100 transition hover:bg-slate-50"
                         >
                           <td className="px-5 py-4">
-                            <p className="font-bold text-white truncate max-w-[200px] text-sm">{s.examName}</p>
-                            <p className="text-[10px] text-slate-400 mt-0.5">{s.subjectCode} · {s.subject}</p>
+                            <p className="font-bold text-slate-900 truncate max-w-[200px] text-sm">{s.examName}</p>
+                            {s.subject && (
+                              <p className="text-[10px] text-slate-500 mt-0.5">{s.subject}</p>
+                            )}
                           </td>
                           <td className="px-4 py-4">
-                            <p className="font-semibold text-white">{s.totalMarks} Marks</p>
+                            <p className="font-semibold text-slate-900">{s.totalMarks} Marks</p>
                             <p className="text-[10px] text-slate-500 mt-0.5">{s.questionCount} Questions</p>
                           </td>
                           <td className="px-4 py-4">
-                            {s.studentsEvaluated ? (
-                              <div>
-                                <p className="font-semibold text-emerald-300">{s.studentsEvaluated} Evaluated</p>
-                                <p className="text-[10px] text-slate-500 mt-0.5">Avg: {s.avgScore}%</p>
-                              </div>
+                            {s.hasModelAnswers ? (
+                              <span className="inline-flex items-center gap-1 text-emerald-700 font-semibold text-xs">
+                                <CheckCircle2 className="h-3.5 w-3.5" /> Ready
+                              </span>
                             ) : (
-                              <p className="font-semibold text-slate-500">—</p>
+                              <span className="text-xs text-slate-400">—</span>
                             )}
                           </td>
-                          <td className="px-4 py-4 text-slate-400">{formatDate(s.dateCreated)}</td>
+                          <td className="px-4 py-4 text-slate-500">{formatDate(s.dateCreated)}</td>
                           <td className="px-4 py-4 text-right">
                             <StatusBadge tone={STATUS_TONE[s.status] ?? 'neutral'} dot>
                               {s.status}

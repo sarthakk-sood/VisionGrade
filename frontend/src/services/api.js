@@ -55,23 +55,62 @@ export const topicApi = {
 
 // ── Question Generation API ────────────────────────────────────────────────────
 export const questionApi = {
-  /**
-   * POST /api/questions/generate
-   * Sends teacher config to backend; backend calls Groq → Gemini fallback.
-   * @param {string} projectId
-   * @param {{ examInfo, difficultyDistribution, topics[] }} config
-   */
   generate: (projectId, config) =>
     api.post('/questions/generate', { projectId, ...config }).then((r) => r.data),
 
-  /**
-   * POST /api/questions/regenerate-single
-   * Asks the LLM to rewrite one question keeping the same type/topic/marks/difficulty.
-   */
+  list: (projectId) =>
+    api.get(`/questions/list/${projectId}`).then((r) => r.data),
+
+  add: (projectId, payload) =>
+    api.post(`/questions/${projectId}/add`, payload).then((r) => r.data),
+
+  update: (projectId, questionId, payload) =>
+    api.patch(`/questions/${projectId}/${questionId}`, payload).then((r) => r.data),
+
+  delete: (projectId, questionId) =>
+    api.delete(`/questions/${projectId}/${questionId}`).then((r) => r.data),
+
   regenerateSingle: (projectId, questionId, { questionType, topicName, marks, difficulty }) =>
     api.post('/questions/regenerate-single', {
       projectId, questionId, questionType, topicName, marks, difficulty,
     }).then((r) => r.data),
+
+  approveSelection: (projectId, questionIds) =>
+    api.patch(`/questions/${projectId}/approve-selection`, { questionIds }).then((r) => r.data),
+};
+
+// ── Exam Session API ─────────────────────────────────────────────────────────
+export const sessionApi = {
+  finalize: (projectId) =>
+    api.post(`/sessions/finalize/${projectId}`).then((r) => r.data),
+
+  list: () =>
+    api.get('/sessions').then((r) => r.data),
+
+  get: (sessionId) =>
+    api.get(`/sessions/${sessionId}`).then((r) => r.data),
+
+  exportQuestionPaper: (sessionId) =>
+    api.get(`/sessions/${sessionId}/export/question-paper`, { responseType: 'blob' }),
+
+  exportAnswerKey: (sessionId) =>
+    api.get(`/sessions/${sessionId}/export/answer-key`, { responseType: 'blob' }),
+};
+
+/** Trigger a browser download from an axios blob response. */
+export const downloadBlobResponse = (response, fallbackName = 'export.pdf') => {
+  const disposition = response.headers?.['content-disposition'] || '';
+  const match = disposition.match(/filename="?([^"]+)"?/);
+  const filename = match?.[1] || fallbackName;
+  const blob = new Blob([response.data], { type: response.headers?.['content-type'] || 'application/pdf' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
 };
 
 // ── Upload API ────────────────────────────────────────────────────────────────

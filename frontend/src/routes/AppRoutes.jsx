@@ -1,5 +1,6 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
 import LoginPage          from '../pages/LoginPage';
+import SignupPage         from '../pages/SignupPage';
 import DashboardPage      from '../pages/DashboardPage';
 import SessionsPage       from '../pages/SessionsPage';
 import SessionDetails     from '../pages/SessionDetails';
@@ -38,7 +39,8 @@ export default function AppRoutes() {
       <Route path="/" element={<Navigate to="/login" replace />} />
 
       {/* Auth — only visible when NOT logged in */}
-      <Route path="/login" element={<PublicOnlyRoute element={<LoginPage />} />} />
+      <Route path="/login"    element={<PublicOnlyRoute element={<LoginPage />} />} />
+      <Route path="/register" element={<PublicOnlyRoute element={<SignupPage />} />} />
 
       {/* Protected app routes */}
       <Route path="/dashboard"   element={<ProtectedRoute element={<DashboardPage />} />} />

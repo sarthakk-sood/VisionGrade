@@ -1,5 +1,12 @@
 const OpenAI = require('openai');
 const { GoogleGenAI } = require('@google/genai');
+const {
+  GROQ_TOPIC_INPUT_CHARS,
+  isQuotaError,
+  parseGeminiRetryDelay,
+  sleep,
+  truncateDocuments,
+} = require('../utils/llmUtils');
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Lazy clients — only instantiated on first use so a missing key only throws
@@ -75,20 +82,14 @@ Return ONLY a valid JSON object — no markdown fences, no explanation:
 // ─────────────────────────────────────────────────────────────────────────────
 // Build the user-facing prompt (shared by both providers)
 // ─────────────────────────────────────────────────────────────────────────────
-const MAX_CHARS_PER_DOC = 80_000;
-
 const buildUserPrompt = (extractedTexts, subject) => {
   const subjectHint = subject
     ? `Hint: The user described this as: "${subject}". However, extract ALL teachable topics you find in the text, regardless of this hint.`
     : 'The subject of the document(s) is unknown — infer it from the content.';
 
-  const combinedText = extractedTexts
-    .map((t, i) => {
-      const truncated = t.length > MAX_CHARS_PER_DOC
-        ? t.slice(0, MAX_CHARS_PER_DOC) + '\n\n[... document truncated for processing ...]'
-        : t;
-      return `=== DOCUMENT ${i + 1} ===\n${truncated}`;
-    })
+  const truncatedTexts = truncateDocuments(extractedTexts, GROQ_TOPIC_INPUT_CHARS);
+  const combinedText = truncatedTexts
+    .map((t, i) => `=== DOCUMENT ${i + 1} ===\n${t}`)
     .join('\n\n');
 
   return `${subjectHint}\n\nPlease analyse the following extracted PDF text and return the topic list as specified:\n\n${combinedText}`;
@@ -125,26 +126,9 @@ const parseTopicsResponse = (raw) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Returns true for HTTP 429 quota-exceeded errors from either provider
+// Returns true for rate-limit / size-limit / temporary availability errors
 // ─────────────────────────────────────────────────────────────────────────────
-const isQuotaError = (err) => {
-  const msg = err?.message || '';
-  const status = err?.status || err?.statusCode || 0;
-  return status === 429 || status === 413 || msg.includes('429') || msg.includes('413') || msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('limit');
-};
 
-// Extract "retry in Xs" delay from a Gemini 429 error message (returns ms).
-// Falls back to 45s if it can't be parsed.
-const parseGeminiRetryDelay = (errMsg) => {
-  const match = errMsg.match(/retry in\s+([\d.]+)s/i);
-  return match ? Math.ceil(parseFloat(match[1]) * 1000) + 1000 : 45_000;
-};
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Groq (Llama 3) provider
-// ─────────────────────────────────────────────────────────────────────────────
 const detectTopicsWithGroq = async (extractedTexts, subject) => {
   const groq = getGroq();
   const userPrompt = buildUserPrompt(extractedTexts, subject);
@@ -152,7 +136,7 @@ const detectTopicsWithGroq = async (extractedTexts, subject) => {
   const response = await groq.chat.completions.create({
     model: 'llama-3.1-8b-instant',
     temperature: 0.2,
-    max_tokens: 2048,
+    max_tokens: 1536,
     response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: TOPIC_DETECTION_SYSTEM_PROMPT },
@@ -204,36 +188,29 @@ const callGeminiModel = async (modelName, extractedTexts, subject) => {
 //   2. If 429 → wait suggested retry delay → try again once
 //   3. If still 429 → try gemini-2.0-flash-lite (separate quota bucket)
 // ─────────────────────────────────────────────────────────────────────────────
-const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash-lite'];
+const GEMINI_MODELS = ['gemini-2.0-flash-lite', 'gemini-2.5-flash'];
 
 const detectTopicsWithGemini = async (extractedTexts, subject) => {
   let lastErr;
 
   for (const modelName of GEMINI_MODELS) {
-    try {
-      console.log(`[llmService] Trying Gemini model: ${modelName}…`);
-      const result = await callGeminiModel(modelName, extractedTexts, subject);
-      return result;
-    } catch (err) {
-      lastErr = err;
-      if (!isQuotaError(err)) {
-        throw err; // non-rate-limit error — stop immediately
-      }
-
-      const retryMs = parseGeminiRetryDelay(err.message);
-      console.warn(`[llmService] ${modelName} rate-limited. Waiting ${Math.round(retryMs / 1000)}s then retrying once…`);
-      await sleep(retryMs);
-
+    for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        console.log(`[llmService] Retrying ${modelName} after wait…`);
+        console.log(`[llmService] Trying Gemini model: ${modelName} (attempt ${attempt + 1})…`);
         const result = await callGeminiModel(modelName, extractedTexts, subject);
-        console.log(`[llmService] ${modelName} retry succeeded`);
         return result;
-      } catch (retryErr) {
-        lastErr = retryErr;
-        console.warn(`[llmService] ${modelName} retry also failed — moving to next model`);
+      } catch (err) {
+        lastErr = err;
+        if (!isQuotaError(err)) {
+          throw err;
+        }
+
+        const retryMs = parseGeminiRetryDelay(err.message, attempt);
+        console.warn(`[llmService] ${modelName} unavailable/rate-limited. Waiting ${Math.round(retryMs / 1000)}s…`);
+        await sleep(retryMs);
       }
     }
+    console.warn(`[llmService] ${modelName} exhausted — trying next model`);
   }
 
   throw lastErr;

@@ -81,7 +81,9 @@ const getProjectTopics = async (req, res, next) => {
   try {
     const { projectId } = req.params;
 
-    const project = await Project.findById(projectId).select('topics detectedSubject subject status teacherId');
+    const project = await Project.findById(projectId).select(
+      'topics detectedSubject subject status teacherId examInfo generatedQuestions generationProvider'
+    );
     if (!project) {
       return res.status(404).json({ success: false, error: 'Project not found' });
     }
@@ -90,12 +92,15 @@ const getProjectTopics = async (req, res, next) => {
     }
 
     return res.status(200).json({
-      success:         true,
-      projectId:       project._id,
-      status:          project.status,
-      subject:         project.subject,
-      detectedSubject: project.detectedSubject,
-      topics:          project.topics,
+      success:            true,
+      projectId:          project._id,
+      status:             project.status,
+      subject:            project.subject,
+      detectedSubject:    project.detectedSubject,
+      topics:             project.topics,
+      examInfo:           project.examInfo,
+      generatedQuestions: project.generatedQuestions,
+      generationProvider: project.generationProvider,
     });
 
   } catch (err) {
@@ -132,13 +137,16 @@ const updateTopicSelection = async (req, res, next) => {
     }
 
     // Build a quick lookup from the incoming update list
-    const updateMap = new Map(updates.map(u => [u.id, u.isSelected]));
+    const updateMap = new Map(updates.map((u) => [u.id, u]));
 
     // Apply changes to the embedded topics array
-    project.topics = project.topics.map(topic => {
-      if (updateMap.has(topic.id)) {
-        topic.isSelected = updateMap.get(topic.id);
-      }
+    project.topics = project.topics.map((topic) => {
+      const patch = updateMap.get(topic.id);
+      if (!patch) return topic;
+      if (patch.isSelected !== undefined) topic.isSelected = patch.isSelected;
+      if (patch.marks !== undefined) topic.marks = patch.marks;
+      if (patch.weightage !== undefined) topic.weightage = patch.weightage;
+      if (patch.difficulty !== undefined) topic.difficulty = patch.difficulty;
       return topic;
     });
 

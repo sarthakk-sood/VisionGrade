@@ -7,7 +7,7 @@ const PORT = process.env.PORT || 5000;
 
 connectDB().then(() => {
   app.listen(PORT, () => {
-    console.log(`Vision-Grade API running on http://localhost:5000 [${process.env.NODE_ENV || 'development'}]`);
+    console.log(`Vision-Grade API running on http://localhost:${PORT} [${process.env.NODE_ENV || 'development'}]`);
   });
 }).catch((err) => {
   console.error('Failed to connect to MongoDB:', err.message);

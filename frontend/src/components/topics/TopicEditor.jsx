@@ -10,8 +10,8 @@ export default function TopicEditor({ topics = [], onAdd, onEdit, onRemove }) {
     <Card>
       <div className="mb-5 flex items-center justify-between gap-3">
         <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-blue-300/80">AI Topics</p>
-          <h3 className="mt-2 text-2xl font-bold text-white">Detected topics</h3>
+          <p className="text-xs uppercase tracking-[0.3em] text-blue-600">AI Topics</p>
+          <h3 className="mt-2 text-2xl font-bold text-slate-900">Detected topics</h3>
         </div>
         <Button variant="secondary" icon={<Plus className="h-4 w-4" />}>Add topic</Button>
       </div>

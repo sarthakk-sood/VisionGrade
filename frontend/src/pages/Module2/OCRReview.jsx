@@ -9,8 +9,8 @@ import Button        from '../../components/common/Button';
 import ProgressBar   from '../../components/common/ProgressBar';
 import StatusBadge   from '../../components/common/StatusBadge';
 import { useAppStore } from '../../store/useAppStore';
+import { PAGE_BG } from '../../utils/theme';
 
-const BG = 'bg-[radial-gradient(circle_at_top,rgba(37,99,235,0.12),transparent_22%),linear-gradient(180deg,#020617_0%,#071226_55%,#0f172a_100%)]';
 const M2_STEPS = ['Select Exam', 'Upload Sheets', 'Processing', 'Review Flags', 'Results'];
 
 const stages = [
@@ -28,13 +28,13 @@ export default function OCRReview() {
   const lowConf = ocrResults.filter((r) => r.confidence < 80);
 
   const confColor = (c) =>
-    c >= 90 ? 'text-emerald-300' : c >= 70 ? 'text-amber-300' : 'text-rose-300';
+    c >= 90 ? 'text-emerald-700' : c >= 70 ? 'text-amber-700' : 'text-rose-600';
 
   const confBadge = (s) =>
-    s === 'High' ? 'bg-emerald-500/15 text-emerald-300' : s === 'Medium' ? 'bg-amber-500/15 text-amber-300' : 'bg-rose-500/15 text-rose-300';
+    s === 'High' ? 'bg-emerald-50 text-emerald-700' : s === 'Medium' ? 'bg-amber-50 text-amber-700' : 'bg-rose-500/15 text-rose-600';
 
   return (
-    <div className={`min-h-screen ${BG}`}>
+    <div className={PAGE_BG}>
       <Navbar />
       <PageContainer subtitle="Module 2 / Step 3" title="Processing Dashboard">
         <div className="flex flex-col gap-6 lg:flex-row">
@@ -48,10 +48,10 @@ export default function OCRReview() {
               {stages.map((stage, i) => {
                 const Icon = stage.icon;
                 const iconBg = {
-                  success: 'bg-emerald-500/15 text-emerald-300',
-                  info:    'bg-blue-500/15    text-blue-300',
-                  warning: 'bg-amber-500/15   text-amber-300',
-                }[stage.tone] ?? 'bg-white/[0.07] text-slate-300';
+                  success: 'bg-emerald-50 text-emerald-700',
+                  info:    'bg-blue-50    text-blue-600',
+                  warning: 'bg-amber-50   text-amber-700',
+                }[stage.tone] ?? 'bg-white/[0.07] text-slate-600';
 
                 return (
                   <motion.div
@@ -59,12 +59,12 @@ export default function OCRReview() {
                     initial={{ opacity: 0, y: 10 }}
                     animate={{ opacity: 1, y: 0 }}
                     transition={{ delay: i * 0.07 }}
-                    className="glass-card rounded-2xl border border-white/[0.07] p-4"
+                    className="glass-card rounded-2xl border border-slate-200 p-4"
                   >
                     <div className={`mb-3 flex h-9 w-9 items-center justify-center rounded-xl ${iconBg}`}>
                       <Icon className="h-4 w-4" />
                     </div>
-                    <p className="text-xl font-black text-white">{stage.value}</p>
+                    <p className="text-xl font-black text-slate-900">{stage.value}</p>
                     <p className="mt-0.5 text-xs text-slate-500">{stage.label}</p>
                     {stage.pct !== null && (
                       <div className="mt-3">
@@ -81,16 +81,16 @@ export default function OCRReview() {
               <div className="mt-5">
                 <div className="mb-3 flex items-center gap-2">
                   <AlertTriangle className="h-4 w-4 text-amber-400" />
-                  <p className="text-sm font-semibold text-white">Low Confidence Regions ({lowConf.length})</p>
+                  <p className="text-sm font-semibold text-slate-900">Low Confidence Regions ({lowConf.length})</p>
                 </div>
                 <div className="grid gap-3 sm:grid-cols-2">
                   {lowConf.map((r) => (
                     <div key={r.id} className="rounded-2xl border border-amber-400/20 bg-amber-500/[0.06] p-4">
                       <div className="flex items-center justify-between gap-2">
-                        <span className="text-sm font-bold text-white">{r.question}</span>
+                        <span className="text-sm font-bold text-slate-900">{r.question}</span>
                         <span className={`text-sm font-black ${confColor(r.confidence)}`}>{r.confidence}%</span>
                       </div>
-                      <p className="mt-1.5 text-xs leading-5 text-slate-400">{r.text}</p>
+                      <p className="mt-1.5 text-xs leading-5 text-slate-500">{r.text}</p>
                     </div>
                   ))}
                 </div>
@@ -99,9 +99,9 @@ export default function OCRReview() {
 
             {/* ── Full OCR Results Table ── */}
             <Card p="p-0" hover={false} className="mt-5">
-              <div className="border-b border-white/[0.06] px-5 py-4">
-                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-blue-400/70">OCR Results</p>
-                <h3 className="mt-0.5 text-sm font-bold text-white">All Extracted Answers</h3>
+              <div className="border-b border-slate-100 px-5 py-4">
+                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500">OCR Results</p>
+                <h3 className="mt-0.5 text-sm font-bold text-slate-900">All Extracted Answers</h3>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs">
@@ -115,15 +115,15 @@ export default function OCRReview() {
                   </thead>
                   <tbody>
                     {ocrResults.map((r) => (
-                      <tr key={r.id} className="border-t border-white/[0.05] transition hover:bg-white/[0.03]">
-                        <td className="px-5 py-4 font-bold text-white">{r.question}</td>
+                      <tr key={r.id} className="border-t border-slate-100 transition hover:bg-slate-50">
+                        <td className="px-5 py-4 font-bold text-slate-900">{r.question}</td>
                         <td className={`px-4 py-4 text-lg font-black ${confColor(r.confidence)}`}>{r.confidence}%</td>
                         <td className="px-4 py-4">
                           <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold ${confBadge(r.status)}`}>
                             {r.status}
                           </span>
                         </td>
-                        <td className="px-4 py-4 max-w-xs text-slate-400 leading-5">{r.text}</td>
+                        <td className="px-4 py-4 max-w-xs text-slate-500 leading-5">{r.text}</td>
                       </tr>
                     ))}
                   </tbody>

@@ -24,6 +24,8 @@ const generatedQuestionSchema = new mongoose.Schema({
   options:      [{ type: String }],   // only for MCQ
   correctAnswer:{ type: String },
   explanation:  { type: String },
+  modelAnswer:  { type: String },
+  markingScheme:{ type: String },
   approved:     { type: Boolean, default: false },
 }, { _id: true });
 
@@ -55,6 +57,7 @@ const projectSchema = new mongoose.Schema({
   // Exam info used for question generation
   examInfo: {
     examTitle:       { type: String },
+    subject:         { type: String },
     totalMarks:      { type: Number, default: 100 },
     durationMinutes: { type: Number, default: 90 },
     instructions:    [{ type: String }],
@@ -80,4 +83,4 @@ const projectSchema = new mongoose.Schema({
   },
 }, { timestamps: true });
 
-module.exports = mongoose.model('Project', projectSchema);
+module.exports = mongoose.model('Project', projectSchema);

@@ -12,6 +12,7 @@ const { notFound } = require('./middleware/notFound');
 const healthRoutes = require('./routes/health');
 const questionRoutes = require('./routes/questions');
 const topicRoutes    = require('./routes/topics');
+const sessionRoutes  = require('./routes/sessions');
 // const evaluationRoutes = require('./routes/evaluation'); // uncomment when ready
 
 const app = express();
@@ -20,7 +21,7 @@ const app = express();
 app.use(helmet());
 app.use(cors({
   origin: process.env.CLIENT_URL || 'http://localhost:5173',
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization'],
 }));
 
@@ -57,6 +58,7 @@ if (process.env.NODE_ENV !== 'test') {
 app.use('/api/health', healthRoutes);
 app.use('/api/questions', questionRoutes);
 app.use('/api/topics', topicRoutes);
+app.use('/api/sessions', sessionRoutes);
 app.use('/api/auth', authRoutes);
 // app.use('/api/evaluation', evaluationRoutes);
 

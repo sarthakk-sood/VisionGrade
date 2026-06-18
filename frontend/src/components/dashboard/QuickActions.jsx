@@ -12,7 +12,7 @@ const cards = [
     gradient: 'from-blue-500/[0.10] to-cyan-400/[0.05]',
     border: 'border-blue-400/15',
     badge: 'Module 1',
-    badgeTone: 'bg-blue-500/20 text-blue-300',
+    badgeTone: 'bg-blue-100 text-blue-600',
   },
   {
     icon: ScanLine,
@@ -23,7 +23,7 @@ const cards = [
     gradient: 'from-purple-500/[0.08] to-blue-400/[0.05]',
     border: 'border-purple-400/15',
     badge: 'Module 2',
-    badgeTone: 'bg-purple-500/20 text-purple-300',
+    badgeTone: 'bg-purple-500/20 text-purple-700',
   },
 ];
 
@@ -47,7 +47,7 @@ export default function QuickActions() {
             <div className="relative">
               {/* Badge + Icon row */}
               <div className="flex items-start justify-between gap-3">
-                <div className={`flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-200 ring-1 ring-blue-400/20`}>
+                <div className={`flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 ring-1 ring-blue-200`}>
                   <Icon className="h-6 w-6" />
                 </div>
                 <span className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.25em] ${card.badgeTone}`}>
@@ -56,13 +56,13 @@ export default function QuickActions() {
               </div>
 
               {/* Title + Description */}
-              <h3 className="mt-4 text-lg font-bold text-white">{card.title}</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-400">{card.description}</p>
+              <h3 className="mt-4 text-lg font-bold text-slate-900">{card.title}</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-500">{card.description}</p>
 
               {/* CTA */}
               <Link
                 to={card.to}
-                className="mt-5 inline-flex items-center gap-2 rounded-xl bg-white/[0.06] border border-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/[0.10]"
+                className="mt-5 inline-flex items-center gap-2 rounded-xl bg-slate-100 border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-900 transition hover:bg-white/[0.10]"
               >
                 Get Started
                 <ArrowRight className="h-4 w-4" />
