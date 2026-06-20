@@ -7,10 +7,13 @@ const { promisify } = require('util');
 const execFileAsync = promisify(execFile);
 
 const TECTONIC_CANDIDATES = [
-  process.env.TECTONIC_PATH,
-  'tectonic',
-  '/opt/homebrew/bin/tectonic',
-  '/usr/local/bin/tectonic',
+  process.env.TECTONIC_PATH,                                    // explicit override in .env
+  'C:\\ProgramData\\chocolatey\\bin\\tectonic.exe',             // choco install tectonic (Windows)
+  'C:\\ProgramData\\chocolatey\\lib\\tectonic\\tools\\tectonic.exe', // choco lib fallback
+  'tectonic',                                                    // on PATH (winget / cargo)
+  '/opt/homebrew/bin/tectonic',                                  // macOS Homebrew
+  '/usr/local/bin/tectonic',                                     // macOS/Linux
+  '/usr/bin/tectonic',
 ].filter(Boolean);
 
 const PDFLATEX_CANDIDATES = [
@@ -29,7 +32,7 @@ const tryTectonic = async (texPath, outDir) => {
   for (const cmd of TECTONIC_CANDIDATES) {
     try {
       await execFileAsync(cmd, [texPath, '--outdir', outDir], {
-        timeout: 180_000,
+        timeout: 60_000, // 60s — packages cached after first run, typical compile ~2-5s
         env: { ...process.env, RUST_LOG: 'error' },
       });
       return true;
@@ -76,7 +79,8 @@ const compileLatexToPdf = async (texContent, basename = 'document') => {
     const pdfPath = path.join(tmpDir, `${safeBase}.pdf`);
     if (!compiled || !fs.existsSync(pdfPath)) {
       throw new Error(
-        'LaTeX compiler not found. Install Tectonic: brew install tectonic'
+        'LaTeX compiler not found. On Windows run: choco install tectonic  ' +
+        '(or set TECTONIC_PATH in your .env to the full path of tectonic.exe)'
       );
     }
 

@@ -131,10 +131,11 @@ export default function QuestionFormModal({
                 <select
                   value={form.type}
                   onChange={(e) => set('type', e.target.value)}
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none"
+                  style={{ colorScheme: 'light' }}
                 >
                   {QUESTION_TYPES.map((t) => (
-                    <option key={t.value} value={t.value} className="bg-slate-900">{t.label}</option>
+                    <option key={t.value} value={t.value}>{t.label}</option>
                   ))}
                 </select>
               </label>
@@ -144,10 +145,11 @@ export default function QuestionFormModal({
                 <select
                   value={form.difficulty}
                   onChange={(e) => set('difficulty', e.target.value)}
-                  className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none"
+                  className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none"
+                  style={{ colorScheme: 'light' }}
                 >
                   {DIFFICULTIES.map((d) => (
-                    <option key={d} value={d} className="bg-slate-900">{d}</option>
+                    <option key={d} value={d}>{d}</option>
                   ))}
                 </select>
               </label>
@@ -168,10 +170,11 @@ export default function QuestionFormModal({
                   <select
                     value={form.topicName}
                     onChange={(e) => set('topicName', e.target.value)}
-                    className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none"
+                    className="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-900 outline-none"
+                    style={{ colorScheme: 'light' }}
                   >
                     {topicOptions.map((t) => (
-                      <option key={t.id} value={t.name} className="bg-slate-900">{t.name}</option>
+                      <option key={t.id} value={t.name}>{t.name}</option>
                     ))}
                   </select>
                 ) : (

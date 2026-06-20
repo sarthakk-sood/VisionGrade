@@ -119,16 +119,26 @@ const parseAnswerResponse = (raw, batchQuestions, startIndex) => {
     throw new Error('LLM response missing "answers" array');
   }
 
-  const byNumber = new Map(
+  // Build two lookup maps:
+  //  1. byGlobalNum – keyed by the global question number the LLM was asked to use
+  //  2. byLocalNum  – keyed by the local (1-based) position within this batch,
+  //                   as a fallback for when the LLM ignores the startIndex offset
+  //                   and returns answers numbered 1..N regardless.
+  const byGlobalNum = new Map(
     parsed.answers.map((a) => [Number(a.questionNumber), a])
+  );
+  const byLocalNum = new Map(
+    parsed.answers.map((a, idx) => [idx + 1, a])
   );
 
   const merged = [];
   for (let i = 0; i < batchQuestions.length; i++) {
-    const num = startIndex + i + 1;
-    const llm = byNumber.get(num) || {};
+    const globalNum = startIndex + i + 1;
+    const localNum  = i + 1;
+    // Prefer an exact global-number match; fall back to local position
+    const llm = byGlobalNum.get(globalNum) || byLocalNum.get(localNum) || {};
     merged.push({
-      questionNumber: num,
+      questionNumber: globalNum,
       correctAnswer:  llm.correctAnswer  || '',
       modelAnswer:    llm.modelAnswer    || '',
       markingScheme:  llm.markingScheme  || '',

@@ -153,12 +153,15 @@ const parseGenerationResponse = (raw) => {
     throw new Error('LLM response missing "questions" array');
   }
 
+  const VALID_Q_DIFFICULTY = ['Easy', 'Medium', 'Hard'];
+  const sanitizeDiff = (d) => (VALID_Q_DIFFICULTY.includes(d) ? d : 'Medium');
+
   // Normalise each question
   const questions = parsed.questions.map((q, idx) => ({
     id:           q.id          ?? idx + 1,
     topicName:    q.topicName   ?? '',
     type:         q.type        ?? 'ShortAnswer',
-    difficulty:   q.difficulty  ?? 'Medium',
+    difficulty:   sanitizeDiff(q.difficulty),
     marks:        q.marks       ?? 0,
     questionText: q.questionText ?? '',
     options:      Array.isArray(q.options) ? q.options : null,

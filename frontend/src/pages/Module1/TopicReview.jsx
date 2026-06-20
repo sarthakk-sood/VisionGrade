@@ -306,11 +306,12 @@ export default function TopicReview() {
                                       value={topic.difficulty || 'Mixed'}
                                       onChange={(e) => updateTopicConfig(topic.id, { difficulty: e.target.value })}
                                       className="cursor-pointer rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-semibold text-slate-900 outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20"
+                                      style={{ colorScheme: 'light' }}
                                     >
-                                      <option value="Easy" className="bg-white text-slate-900">Easy</option>
-                                      <option value="Medium" className="bg-white text-slate-900">Medium</option>
-                                      <option value="Hard" className="bg-white text-slate-900">Hard</option>
-                                      <option value="Mixed" className="bg-white text-slate-900">Mixed</option>
+                                      <option value="Easy">Easy</option>
+                                      <option value="Medium">Medium</option>
+                                      <option value="Hard">Hard</option>
+                                      <option value="Mixed">Mixed</option>
                                     </select>
                                   </div>
                                 </div>

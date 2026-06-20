@@ -6,6 +6,9 @@ const { buildQuestionPaperLatex, buildAnswerKeyLatex } = require('../services/la
 const { compileLatexToPdf } = require('../services/latexCompileService');
 const { sanitizeFilename } = require('../utils/latexEscape');
 
+const VALID_SESSION_DIFFICULTY = ['Easy', 'Medium', 'Hard'];
+const sanitizeDifficulty = (d) => (VALID_SESSION_DIFFICULTY.includes(d) ? d : 'Medium');
+
 const loadOwnedProject = async (projectId, teacherId) => {
   const project = await Project.findById(projectId);
   if (!project) {
@@ -157,12 +160,20 @@ const finalizeSession = async (req, res, next) => {
 
     const sessionQuestions = approvedPayload.map((q, i) => {
       const llm = llmAnswers[i] || {};
+      // Guard: verify the LLM answer index matches the question (questionNumber should be i+1)
+      if (llm.questionNumber && llm.questionNumber !== i + 1) {
+        console.warn(
+          `[sessionController] Answer index mismatch at position ${i}: ` +
+          `expected questionNumber ${i + 1}, got ${llm.questionNumber}. ` +
+          `Using positional assignment — check LLM batch numbering.`
+        );
+      }
       return {
         sourceQuestionId: q._id,
         questionNumber:   i + 1,
         topicName:        q.topicName,
         type:             q.type,
-        difficulty:       q.difficulty,
+        difficulty:       sanitizeDifficulty(q.difficulty),
         marks:            q.marks,
         questionText:     q.questionText,
         options:          q.options || [],
@@ -171,6 +182,13 @@ const finalizeSession = async (req, res, next) => {
         markingScheme:    llm.markingScheme || `Full marks (${q.marks}): accurate complete answer.`,
         explanation:      llm.explanation || q.explanation || '',
       };
+    });
+
+    console.log('[sessionController] Question-answer pairing check:');
+    sessionQuestions.forEach((sq) => {
+      console.log(
+        `  Q${sq.questionNumber} [${sq.type}]: "${sq.questionText?.slice(0, 50)}…" → answer: "${sq.correctAnswer?.slice(0, 40) || '(empty)'}"`
+      );
     });
 
     // Sync enriched answers back to approved project subdocuments

@@ -86,3 +86,33 @@ input[type='range'] { accent-color: #2563eb; }
     @apply text-slate-500;
   }
 }
+
+/* ── Select / Dropdown global fix ─────────────────────────────────────────────
+   Browser-native <option> elements do NOT respect Tailwind className props.
+   These rules ensure options are always readable regardless of page theme
+   and prevent system dark-mode from making text invisible.                   */
+select,
+select.bg-slate-50,
+select.bg-white {
+  -webkit-appearance: auto;
+  appearance: auto;
+  color: #0f172a !important;
+  background-color: #ffffff !important;
+  color-scheme: light;
+}
+
+select option,
+select option:hover,
+select option:focus,
+select option:active,
+select option:checked {
+  color: #0f172a !important;
+  background-color: #ffffff !important;
+  color-scheme: light;
+}
+
+select:focus {
+  outline: none;
+  border-color: #93c5fd;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}

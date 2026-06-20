@@ -90,11 +90,22 @@ export const sessionApi = {
   get: (sessionId) =>
     api.get(`/sessions/${sessionId}`).then((r) => r.data),
 
-  exportQuestionPaper: (sessionId) =>
-    api.get(`/sessions/${sessionId}/export/question-paper`, { responseType: 'blob' }),
+  /**
+   * Returns a direct download URL with ?token= embedded.
+   * This lets IDM (and other download managers) re-request the URL
+   * without needing the Authorization header, preventing the 401 error.
+   */
+  exportQuestionPaperUrl: (sessionId) => {
+    const token = localStorage.getItem('vg_token') || '';
+    const base = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+    return `${base}/sessions/${sessionId}/export/question-paper?token=${encodeURIComponent(token)}`;
+  },
 
-  exportAnswerKey: (sessionId) =>
-    api.get(`/sessions/${sessionId}/export/answer-key`, { responseType: 'blob' }),
+  exportAnswerKeyUrl: (sessionId) => {
+    const token = localStorage.getItem('vg_token') || '';
+    const base = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
+    return `${base}/sessions/${sessionId}/export/answer-key?token=${encodeURIComponent(token)}`;
+  },
 };
 
 /** Trigger a browser download from an axios blob response. */

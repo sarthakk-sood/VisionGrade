@@ -6,6 +6,11 @@ const { generateQuestions } = require('../services/questionGenerationService');
 
 const VALID_TYPES = ['MCQ', 'ShortAnswer', 'MediumAnswer', 'LongAnswer', 'FillInTheBlanks'];
 const VALID_DIFFICULTY = ['Easy', 'Medium', 'Hard'];
+const VALID_TOPIC_DIFFICULTY = ['Easy', 'Medium', 'Hard', 'Mixed'];
+
+/** 'Mixed' is valid for topics (means "generate a mix") but NOT for individual questions.
+ *  Sanitize at the question-save boundary so Mongoose enum never rejects it. */
+const sanitizeDifficulty = (d) => (d === 'Mixed' || !VALID_DIFFICULTY.includes(d) ? 'Medium' : d);
 
 const formatQuestion = (q) => ({
   _id:           q._id,
@@ -56,10 +61,10 @@ const applyQuestionPatch = (question, body) => {
     question.type = body.type;
   }
   if (body.difficulty !== undefined) {
-    if (!VALID_DIFFICULTY.includes(body.difficulty)) {
-      throw Object.assign(new Error(`Invalid difficulty. Use: ${VALID_DIFFICULTY.join(', ')}`), { statusCode: 400 });
+    if (!VALID_TOPIC_DIFFICULTY.includes(body.difficulty)) {
+      throw Object.assign(new Error(`Invalid difficulty. Use: ${VALID_TOPIC_DIFFICULTY.join(', ')}`), { statusCode: 400 });
     }
-    question.difficulty = body.difficulty;
+    question.difficulty = sanitizeDifficulty(body.difficulty);
   }
   if (body.marks !== undefined) {
     const marks = Number(body.marks);
@@ -256,7 +261,7 @@ const addQuestionHandler = async (req, res, next) => {
     const draft = {
       topicName:     req.body.topicName || 'General',
       type:          req.body.type || 'ShortAnswer',
-      difficulty:    req.body.difficulty || 'Medium',
+      difficulty:    sanitizeDifficulty(req.body.difficulty || 'Medium'),
       marks:         Number(req.body.marks) || 2,
       questionText:  req.body.questionText || '',
       options:       req.body.options || [],

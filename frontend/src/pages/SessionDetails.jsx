@@ -7,7 +7,7 @@ import {
   CheckCircle2, Clock3,
 } from 'lucide-react';
 import { useAppStore } from '../store/useAppStore';
-import { sessionApi, downloadBlobResponse } from '../services/api';
+import { sessionApi } from '../services/api';
 import Navbar        from '../components/layout/Navbar';
 import Sidebar       from '../components/layout/Sidebar';
 import PageContainer from '../components/layout/PageContainer';
@@ -60,49 +60,37 @@ export default function SessionDetails() {
 
   const [modelAnswers, setModelAnswers] = useState(null);
   const [loadingSession, setLoadingSession] = useState(true);
-  const [exportingPaper, setExportingPaper] = useState(false);
-  const [exportingKey, setExportingKey] = useState(false);
   const [exportError, setExportError] = useState(null);
 
-  const parseExportError = async (err) => {
-    const data = err?.response?.data;
-    if (data instanceof Blob) {
-      try {
-        const text = await data.text();
-        const json = JSON.parse(text);
-        return json.error || 'Export failed';
-      } catch {
-        return 'Export failed';
-      }
-    }
-    return err?.response?.data?.error || err.message || 'Export failed';
-  };
-
-  const handleExportQuestionPaper = async () => {
+  const handleExportQuestionPaper = () => {
     if (!id) return;
-    setExportingPaper(true);
     setExportError(null);
     try {
-      const res = await sessionApi.exportQuestionPaper(id);
-      downloadBlobResponse(res, `${session?.examName || 'exam'}-question-paper.pdf`);
+      const url = sessionApi.exportQuestionPaperUrl(id);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${session?.examName || 'exam'}-question-paper.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
     } catch (err) {
-      setExportError(await parseExportError(err));
-    } finally {
-      setExportingPaper(false);
+      setExportError(err.message || 'Export failed');
     }
   };
 
-  const handleExportAnswerKey = async () => {
+  const handleExportAnswerKey = () => {
     if (!id) return;
-    setExportingKey(true);
     setExportError(null);
     try {
-      const res = await sessionApi.exportAnswerKey(id);
-      downloadBlobResponse(res, `${session?.examName || 'exam'}-answer-key.pdf`);
+      const url = sessionApi.exportAnswerKeyUrl(id);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${session?.examName || 'exam'}-answer-key.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
     } catch (err) {
-      setExportError(await parseExportError(err));
-    } finally {
-      setExportingKey(false);
+      setExportError(err.message || 'Export failed');
     }
   };
 
@@ -345,8 +333,7 @@ export default function SessionDetails() {
                   size="sm"
                   icon={<Download className="h-4 w-4" />}
                   onClick={handleExportQuestionPaper}
-                  loading={exportingPaper}
-                  disabled={exportingKey || !modelAnswers?.length}
+                  disabled={!modelAnswers?.length}
                 >
                   Export Question Paper PDF
                 </Button>
@@ -355,8 +342,7 @@ export default function SessionDetails() {
                   size="sm"
                   icon={<Download className="h-4 w-4" />}
                   onClick={handleExportAnswerKey}
-                  loading={exportingKey}
-                  disabled={exportingPaper || !modelAnswers?.length}
+                  disabled={!modelAnswers?.length}
                 >
                   Export Answer Key PDF
                 </Button>

@@ -21,9 +21,9 @@ import { PAGE_BG } from '../../utils/theme';
 const M1_STEPS = ['Exam Details', 'Upload PDFs', 'Topics & Weightage', 'Generate Questions', 'Review Questions', 'Export'];
 
 const DIFF_STYLE = {
-  Easy:   'bg-emerald-50 text-emerald-700',
-  Medium: 'bg-amber-50  text-amber-700',
-  Hard:   'bg-rose-500/15   text-rose-600',
+  Easy:   'bg-emerald-100 text-emerald-800 border border-emerald-200',
+  Medium: 'bg-amber-100 text-amber-800 border border-amber-200',
+  Hard:   'bg-rose-100 text-rose-800 border border-rose-200',
 };
 
 function ActionBtn({ onClick, className, icon: Icon, label, loading = false, disabled = false }) {
@@ -234,16 +234,19 @@ export default function QuestionReview() {
                         <p className="mt-1 text-[10px] text-slate-600">Topic: {q.topic}</p>
 
                         {q.type === 'MCQ' && q.options?.length > 0 && (
-                          <ul className="mt-2 space-y-1 pl-4">
+                          <ul className="mt-3 space-y-1.5 pl-1">
                             {q.options.map((opt, idx) => (
-                              <li key={idx} className="text-xs text-slate-500">{opt}</li>
+                              <li key={idx} className="flex items-start gap-2 text-xs text-slate-700">
+                                <span className="shrink-0 flex h-4 w-4 items-center justify-center rounded-full bg-slate-200 text-[9px] font-bold text-slate-700">{String.fromCharCode(65 + idx)}</span>
+                                <span>{opt}</span>
+                              </li>
                             ))}
                           </ul>
                         )}
 
                         {q.answer && (
-                          <p className="mt-2 text-xs text-emerald-400/80">
-                            Answer: {q.answer}
+                          <p className="mt-2 rounded-lg bg-emerald-50 border border-emerald-200 px-2.5 py-1.5 text-xs font-semibold text-emerald-800">
+                            ✓ Answer: {q.answer}
                           </p>
                         )}
 

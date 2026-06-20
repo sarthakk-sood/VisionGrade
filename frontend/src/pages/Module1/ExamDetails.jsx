@@ -84,10 +84,10 @@ export default function ExamDetails() {
   };
 
   const diffColor = {
-    Easy:   'border-emerald-400/40 bg-emerald-500/20 text-emerald-200',
-    Medium: 'border-amber-400/40  bg-amber-500/20  text-amber-200',
-    Hard:   'border-rose-400/40   bg-rose-500/20   text-rose-200',
-    Mixed:  'border-blue-400/40   bg-blue-100   text-blue-600',
+    Easy:   'border-emerald-400/60 bg-emerald-100 text-emerald-800',
+    Medium: 'border-amber-400/60  bg-amber-100  text-amber-800',
+    Hard:   'border-rose-400/60   bg-rose-100   text-rose-800',
+    Mixed:  'border-blue-400/40   bg-blue-100   text-blue-700',
   };
 
   return (
@@ -127,8 +127,13 @@ export default function ExamDetails() {
                     </div>
                     <div>
                       <label className={LABEL_CLS}>Semester</label>
-                      <select value={form.semester} onChange={(e) => set('semester', e.target.value)} className={`${INPUT_CLS} cursor-pointer`}>
-                        {SEMESTERS.map((s) => <option key={s} value={s} className="bg-white">{s}</option>)}
+                      <select
+                        value={form.semester}
+                        onChange={(e) => set('semester', e.target.value)}
+                        className={`${INPUT_CLS} cursor-pointer !bg-white`}
+                        style={{ colorScheme: 'light' }}
+                      >
+                        {SEMESTERS.map((s) => <option key={s} value={s}>{s}</option>)}
                       </select>
                     </div>
                     <div>
