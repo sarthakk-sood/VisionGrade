@@ -1,0 +1,9 @@
+[Page 1]
+Q1 . The mitochondria is the powerhouse of the cell .
+# Q2 . Photosynthesis converts light energy to chemical energy ...
+# Q3 . Newton's second law . Force equals mass times acceleration ...
+Q4 . The French Revolution began in 1789 .
+# Q5 . Water boils at 100 degrees Celsius at standard pressure .
+" QG. Shakespeare wrote Romeo and Juliet around 1597 .
+QF. The speed of light is approximately 3 x10/8 metres per second .
+QB. DNA stands for Deoxyribonucleic Acid .
