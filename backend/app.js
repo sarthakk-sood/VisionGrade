@@ -11,8 +11,9 @@ const errorHandler = require('./middleware/errorHandler');
 const { notFound } = require('./middleware/notFound');
 const healthRoutes = require('./routes/health');
 const questionRoutes = require('./routes/questions');
-const topicRoutes    = require('./routes/topics');
-const sessionRoutes  = require('./routes/sessions');
+const topicRoutes = require('./routes/topics');
+const sessionRoutes = require('./routes/sessions');
+const ocrRoutes      = require('./routes/ocr');
 // const evaluationRoutes = require('./routes/evaluation'); // uncomment when ready
 
 const app = express();
@@ -62,6 +63,7 @@ app.use('/api/questions', questionRoutes);
 app.use('/api/topics', topicRoutes);
 app.use('/api/sessions', sessionRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/ocr',  ocrRoutes);
 // app.use('/api/evaluation', evaluationRoutes);
 
 // ── Error handling ────────────────────────────────────────────────────────────

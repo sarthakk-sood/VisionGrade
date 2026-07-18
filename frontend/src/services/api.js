@@ -152,8 +152,72 @@ export const authApi = {
     api.post('/auth/register', payload).then((r) => r.data),
 
   logout: () =>
-    api.post('/auth/logout').then((r) => r.data).catch(() => {}), // best-effort
+    api.post('/auth/logout').then((r) => r.data).catch(() => { }), // best-effort
 
   getMe: () =>
     api.get('/auth/me').then((r) => r.data),
+};
+
+// ── OCR / Answer Sheet API (Module 2) ─────────────────────────────────────────
+//
+// Architecture note — async job polling:
+//   TrOCR on CPU can take 5–30 min per page. The Node backend now uses an async
+//   job pattern: POST /extract submits the job to Python, then polls every 5 s
+//   until done (up to 30 min). This request must stay open that long, so the
+//   axios timeout below is set to 35 min to comfortably cover that window.
+//
+export const ocrApi = {
+  /**
+   * POST /api/ocr/extract
+   * Upload a PDF answer sheet and receive TrOCR extracted text per page.
+   * Node backend polls the Python job internally — this call resolves when
+   * OCR is complete (which can take up to 30 min on CPU).
+   *
+   * Required FormData fields : pdf (File), rollNumber (string)
+   * Optional FormData fields : studentName (string), sessionId (string)
+   *
+   * @param {FormData} formData
+   * @param {(pct: number) => void} [onUploadProgress]
+   * @returns {Promise<{
+   *   success: boolean,
+   *   data: {
+   *     answerSheetId: string | null,
+   *     rollNumber: string,
+   *     studentName: string | null,
+   *     totalPages: number,
+   *     avgConfidence: number,
+   *     lowConfidencePages: number[],
+   *     isLowConfidence: boolean,
+   *     pages: Array<{
+   *       pageNumber: number,
+   *       text: string,
+   *       confidence: number,
+   *       lines: Array<{ lineNumber: number, text: string, confidence: number, bbox: number[] }>
+   *     }>
+   *   }
+   * }>}
+   */
+  extract: (formData, onUploadProgress) =>
+    api.post('/ocr/extract', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      // 35 min — covers the 30-min backend polling window with margin
+      timeout: 35 * 60 * 1000,
+      onUploadProgress: (e) => {
+        if (onUploadProgress && e.total) {
+          onUploadProgress(Math.round((e.loaded * 100) / e.total));
+        }
+      },
+    }).then((r) => r.data),
+
+  /**
+   * GET /api/ocr/:sheetId
+   * Fetch a previously extracted AnswerSheet document from MongoDB.
+   */
+  get: (sheetId) => api.get(`/ocr/${sheetId}`).then((r) => r.data),
+
+  /**
+   * GET /api/ocr/service-health
+   * Check whether the Python TrOCR microservice is reachable.
+   */
+  serviceHealth: () => api.get('/ocr/service-health').then((r) => r.data),
 };

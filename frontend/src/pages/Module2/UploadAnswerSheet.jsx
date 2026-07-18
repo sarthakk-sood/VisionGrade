@@ -1,8 +1,26 @@
-import { useState } from 'react';
-import { motion } from 'framer-motion';
+/**
+ * UploadAnswerSheet.jsx — Module 2, Steps 1 & 2
+ *
+ * Phase 1 — Select Exam Session (unchanged UI from original stub)
+ * Phase 2 — Upload a single PDF answer sheet:
+ *            • Roll number + optional student name
+ *            • Drag-and-drop / browse file picker (PDF only)
+ *            • Real upload to POST /api/ocr/extract via ocrApi
+ *            • Upload progress bar → processing spinner → navigate to OCRReview
+ *
+ * NOTE: TrOCR is a line-by-line model — it requires the Python microservice to
+ * be running (cd ocr_service && python main.py). Processing time on CPU is
+ * ~5–30 seconds per page; a spinner with elapsed time is shown during inference.
+ */
+
+import { useState, useRef, useCallback } from 'react';
+import { useNavigate }                   from 'react-router-dom';
+import { motion, AnimatePresence }       from 'framer-motion';
 import {
-  ArrowRight, ArrowLeft, ScanLine, User, CheckCircle2, FileText,
+  ArrowRight, ArrowLeft, ScanLine, User, CheckCircle2,
+  FileText, Upload, X, AlertCircle, Loader2, Clock,
 } from 'lucide-react';
+
 import Navbar        from '../../components/layout/Navbar';
 import Sidebar       from '../../components/layout/Sidebar';
 import PageContainer from '../../components/layout/PageContainer';
@@ -13,7 +31,8 @@ import StatusBadge   from '../../components/common/StatusBadge';
 import ProgressBar   from '../../components/common/ProgressBar';
 import EmptyState    from '../../components/common/EmptyState';
 import { useAppStore } from '../../store/useAppStore';
-import { PAGE_BG } from '../../utils/theme';
+import { ocrApi }    from '../../services/api';
+import { PAGE_BG }   from '../../utils/theme';
 
 const M2_STEPS = ['Select Exam', 'Upload Sheets', 'Processing', 'Review Flags', 'Results'];
 
@@ -22,24 +41,135 @@ const STATUS_TONE = {
   Evaluating: 'warning', Generated: 'info', Draft: 'neutral',
 };
 
-const demoSheets = [
-  { id: 1, studentName: 'Aarav Sharma',   rollNo: 'CS2026-014', fileName: 'Sheet_014.jpg', size: '3.2 MB', progress: 100, status: 'Processed' },
-  { id: 2, studentName: 'Meera Iyer',     rollNo: 'CS2026-021', fileName: 'Sheet_021.pdf', size: '6.7 MB', progress: 100, status: 'Processed' },
-  { id: 3, studentName: 'Kabir Singh',    rollNo: 'CS2026-033', fileName: 'Sheet_033.png', size: '2.8 MB', progress: 100, status: 'Processed' },
-  { id: 4, studentName: 'Priya Nair',     rollNo: 'CS2026-045', fileName: 'Sheet_045.jpg', size: '4.1 MB', progress: 78,  status: 'Uploading' },
-  { id: 5, studentName: 'Rahul Verma',    rollNo: 'CS2026-052', fileName: 'Sheet_052.pdf', size: '5.3 MB', progress: 45,  status: 'Uploading' },
-];
+const MAX_FILE_MB = 50;
+
+// ── Elapsed timer hook ─────────────────────────────────────────────────────────
+function useElapsed(running) {
+  const [elapsed, setElapsed] = useState(0);
+  const intervalRef = useRef(null);
+
+  if (running && !intervalRef.current) {
+    intervalRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
+  }
+  if (!running && intervalRef.current) {
+    clearInterval(intervalRef.current);
+    intervalRef.current = null;
+    // Reset when a new upload starts (handled externally)
+  }
+
+  return elapsed;
+}
 
 export default function UploadAnswerSheet() {
-  const examSessions    = useAppStore((s) => s.examSessions);
+  const navigate = useNavigate();
+
+  const examSessions     = useAppStore((s) => s.examSessions);
   const selectedSessionId = useAppStore((s) => s.selectedSessionId);
-  const selectSession   = useAppStore((s) => s.selectSession);
+  const selectSession    = useAppStore((s) => s.selectSession);
 
-  const [phase, setPhase] = useState(1);
+  const [phase, setPhase]           = useState(1);
+  const [file, setFile]             = useState(null);
+  const [rollNumber, setRollNumber] = useState('');
+  const [studentName, setStudentName] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
+  const [uploadPct, setUploadPct]   = useState(0);
 
+  // 'idle' | 'uploading' | 'processing' | 'done' | 'error'
+  const [status, setStatus]   = useState('idle');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [elapsed, setElapsedVal] = useState(0);
+  const elapsedRef = useRef(null);
+
+  const fileInputRef = useRef(null);
   const selectedSession = examSessions.find((s) => s.id === selectedSessionId) ?? null;
 
-  // ── Phase 1: Select Exam ──────────────────────────────
+  // ── File helpers ─────────────────────────────────────────────────────────────
+  const validateFile = (f) => {
+    if (!f) return 'No file selected.';
+    if (f.type !== 'application/pdf') return 'Only PDF files are accepted.';
+    if (f.size > MAX_FILE_MB * 1024 * 1024) return `File exceeds ${MAX_FILE_MB} MB limit.`;
+    return null;
+  };
+
+  const pickFile = (f) => {
+    const err = validateFile(f);
+    if (err) { setErrorMsg(err); return; }
+    setFile(f);
+    setErrorMsg('');
+    setStatus('idle');
+  };
+
+  const onInputChange = (e) => { if (e.target.files?.[0]) pickFile(e.target.files[0]); };
+
+  const onDrop = useCallback((e) => {
+    e.preventDefault();
+    setIsDragging(false);
+    const dropped = e.dataTransfer.files?.[0];
+    if (dropped) pickFile(dropped);
+  }, []);
+
+  const startElapsed = () => {
+    setElapsedVal(0);
+    clearInterval(elapsedRef.current);
+    elapsedRef.current = setInterval(() => setElapsedVal((s) => s + 1), 1000);
+  };
+  const stopElapsed = () => clearInterval(elapsedRef.current);
+
+  // ── Submit ────────────────────────────────────────────────────────────────────
+  const handleSubmit = async () => {
+    if (!file) { setErrorMsg('Please select a PDF file.'); return; }
+    if (!rollNumber.trim()) { setErrorMsg('Roll number is required.'); return; }
+
+    setErrorMsg('');
+    setStatus('uploading');
+    setUploadPct(0);
+    startElapsed();
+
+    const form = new FormData();
+    form.append('pdf', file);
+    form.append('rollNumber', rollNumber.trim());
+    if (studentName.trim()) form.append('studentName', studentName.trim());
+    if (selectedSessionId)  form.append('sessionId', selectedSessionId);
+
+    try {
+      // Phase 1: file upload (tracked by onUploadProgress)
+      setStatus('uploading');
+      const resp = await ocrApi.extract(form, (pct) => {
+        setUploadPct(pct);
+        // Once upload is 100%, switch to "processing" (TrOCR inference)
+        if (pct === 100) setStatus('processing');
+      });
+
+      stopElapsed();
+      setStatus('done');
+
+      // Navigate to OCRReview, passing the result in router state
+      navigate('/module2/ocr', { state: { ocrData: resp.data } });
+
+    } catch (err) {
+      stopElapsed();
+      setStatus('error');
+      const serverMsg = err?.response?.data?.error
+        || err?.response?.data?.detail
+        || err?.message
+        || 'Upload failed. Please try again.';
+
+      // Surface a helpful hint if the Python service is down
+      if (serverMsg.includes('OCR microservice') || err?.code === 'ECONNABORTED') {
+        setErrorMsg(
+          'The OCR service is not responding. ' +
+          'Please start it with: cd ocr_service && python main.py'
+        );
+      } else {
+        setErrorMsg(serverMsg);
+      }
+    }
+  };
+
+  const isLoading = status === 'uploading' || status === 'processing';
+  const fmt = (s) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
+
+  // ── Phase 1: Select Exam ──────────────────────────────────────────────────────
   if (phase === 1) {
     return (
       <div className={PAGE_BG}>
@@ -47,7 +177,6 @@ export default function UploadAnswerSheet() {
         <PageContainer subtitle="Module 2 / Step 1" title="Select Exam Session">
           <div className="flex flex-col gap-6 lg:flex-row">
             <Sidebar />
-
             <div className="flex-1 min-w-0">
               <Stepper steps={M2_STEPS} currentStep={1} />
 
@@ -85,7 +214,6 @@ export default function UploadAnswerSheet() {
                             : 'border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-slate-100',
                         ].join(' ')}
                       >
-                        {/* Status badge top-right */}
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
                             <p className="truncate font-bold text-slate-900">{session.examName}</p>
@@ -112,8 +240,7 @@ export default function UploadAnswerSheet() {
 
                         {isSelected && (
                           <div className="mt-3 flex items-center gap-1.5 text-xs text-blue-600">
-                            <CheckCircle2 className="h-3.5 w-3.5" />
-                            Selected
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Selected
                           </div>
                         )}
                       </motion.div>
@@ -131,7 +258,7 @@ export default function UploadAnswerSheet() {
                   disabled={!selectedSessionId}
                   icon={<ArrowRight className="h-4 w-4" />}
                 >
-                  Confirm & Continue
+                  Confirm &amp; Continue
                 </Button>
               </div>
             </div>
@@ -141,18 +268,18 @@ export default function UploadAnswerSheet() {
     );
   }
 
-  // ── Phase 2: Upload Sheets ────────────────────────────
+  // ── Phase 2: Upload Answer Sheet ──────────────────────────────────────────────
   return (
     <div className={PAGE_BG}>
       <Navbar />
-      <PageContainer subtitle="Module 2 / Step 2" title="Upload Answer Sheets">
+      <PageContainer subtitle="Module 2 / Step 2" title="Upload Answer Sheet">
         <div className="flex flex-col gap-6 lg:flex-row">
           <Sidebar />
 
           <div className="flex-1 min-w-0">
             <Stepper steps={M2_STEPS} currentStep={2} />
 
-            {/* Selected session chip */}
+            {/* Session chip */}
             {selectedSession && (
               <div className="mb-5 flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
                 <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-blue-50">
@@ -160,7 +287,9 @@ export default function UploadAnswerSheet() {
                 </div>
                 <div className="min-w-0">
                   <p className="truncate text-xs font-semibold text-slate-900">{selectedSession.examName}</p>
-                  <p className="text-[10px] text-slate-500">{selectedSession.subject} · {selectedSession.questionCount} questions · {selectedSession.totalMarks} marks</p>
+                  <p className="text-[10px] text-slate-500">
+                    {selectedSession.subject} · {selectedSession.questionCount} questions · {selectedSession.totalMarks} marks
+                  </p>
                 </div>
                 <StatusBadge tone={STATUS_TONE[selectedSession.status] ?? 'neutral'} className="ml-auto shrink-0">
                   {selectedSession.status}
@@ -170,85 +299,201 @@ export default function UploadAnswerSheet() {
 
             <div className="grid gap-5 xl:grid-cols-2">
 
-              {/* Left: Upload zone */}
+              {/* ── Left: Student info ── */}
+              <Card>
+                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500">Student</p>
+                <h3 className="mt-1 text-base font-bold text-slate-900">Student Details</h3>
+
+                <div className="mt-4 space-y-4">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                      Roll Number <span className="text-rose-500">*</span>
+                    </label>
+                    <div className="flex items-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 gap-2 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition">
+                      <User className="h-4 w-4 shrink-0 text-slate-400" />
+                      <input
+                        type="text"
+                        value={rollNumber}
+                        onChange={(e) => setRollNumber(e.target.value)}
+                        placeholder="e.g. CS2026-014"
+                        disabled={isLoading}
+                        className="flex-1 bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                      Student Name <span className="text-slate-400 font-normal">(optional)</span>
+                    </label>
+                    <div className="flex items-center rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 gap-2 focus-within:border-blue-400 focus-within:ring-2 focus-within:ring-blue-100 transition">
+                      <User className="h-4 w-4 shrink-0 text-slate-400" />
+                      <input
+                        type="text"
+                        value={studentName}
+                        onChange={(e) => setStudentName(e.target.value)}
+                        placeholder="e.g. Aarav Sharma"
+                        disabled={isLoading}
+                        className="flex-1 bg-transparent text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Model note */}
+                <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
+                  <p className="text-xs font-semibold text-blue-800">Using TrOCR (microsoft/trocr-base-handwritten)</p>
+                  <p className="mt-1 text-[11px] leading-5 text-blue-700">
+                    The model processes one text line at a time. Each PDF page is
+                    segmented into individual line crops before recognition.
+                    Expect <strong>5–30 seconds per page</strong> on CPU; ~1–5 s on GPU.
+                  </p>
+                </div>
+              </Card>
+
+              {/* ── Right: File drop zone + status ── */}
               <Card>
                 <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500">Upload</p>
-                <h3 className="mt-1 text-lg font-bold text-slate-900">Upload Answer Sheets</h3>
-                <p className="mt-1 text-xs text-slate-500">Drop student answer sheets for OCR processing.</p>
+                <h3 className="mt-1 text-base font-bold text-slate-900">Answer Sheet PDF</h3>
 
+                {/* Drop zone */}
                 <motion.div
-                  whileHover={{ borderColor: 'rgba(96,165,250,0.4)', backgroundColor: 'rgba(59,130,246,0.05)' }}
-                  className="mt-5 flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed border-blue-200 bg-blue-500/[0.03] p-10 text-center transition-colors duration-200"
+                  onDragEnter={(e) => { e.preventDefault(); setIsDragging(true); }}
+                  onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
+                  onDragLeave={() => setIsDragging(false)}
+                  onDrop={onDrop}
+                  onClick={() => !isLoading && fileInputRef.current?.click()}
+                  animate={{
+                    borderColor: isDragging ? 'rgba(59,130,246,0.6)' : 'rgba(96,165,250,0.25)',
+                    backgroundColor: isDragging ? 'rgba(59,130,246,0.08)' : 'rgba(59,130,246,0.03)',
+                  }}
+                  className="mt-4 flex cursor-pointer flex-col items-center justify-center rounded-2xl border-2 border-dashed p-8 text-center transition-colors duration-200"
                 >
                   <motion.div
                     animate={{ y: [0, -5, 0] }}
                     transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
                   >
-                    <ScanLine className="mx-auto h-10 w-10 text-blue-600/50" />
+                    <ScanLine className="mx-auto h-10 w-10 text-blue-500/50" />
                   </motion.div>
-                  <p className="mt-4 text-sm font-semibold text-slate-900">Drop answer sheet images or PDFs</p>
-                  <p className="mt-1.5 text-xs text-slate-500">JPG, PNG, PDF supported · Max 10MB per file</p>
-                  <div className="mt-4 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-100">
-                    Browse Files
-                  </div>
+
+                  {file ? (
+                    <div className="mt-3 flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-blue-600" />
+                      <span className="text-sm font-semibold text-slate-900 truncate max-w-[200px]">
+                        {file.name}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); setFile(null); setStatus('idle'); }}
+                        className="rounded-full p-0.5 text-slate-400 hover:text-rose-500 transition-colors"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <p className="mt-3 text-sm font-semibold text-slate-900">
+                        Drop the answer sheet PDF here
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">or click to browse · max {MAX_FILE_MB} MB</p>
+                    </>
+                  )}
+
+                  {file && (
+                    <p className="mt-1.5 text-[10px] text-slate-400">
+                      {(file.size / (1024 * 1024)).toFixed(1)} MB
+                    </p>
+                  )}
                 </motion.div>
 
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <StatusBadge tone="success" dot>JPG / PNG</StatusBadge>
-                  <StatusBadge tone="info"    dot>PDF Supported</StatusBadge>
-                  <StatusBadge tone="neutral">Max 10MB / file</StatusBadge>
-                </div>
-              </Card>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="application/pdf"
+                  className="hidden"
+                  onChange={onInputChange}
+                />
 
-              {/* Right: Student queue */}
-              <Card>
-                <div className="mb-4 flex items-center justify-between">
-                  <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500">Upload Queue</p>
-                    <h3 className="mt-1 text-base font-bold text-slate-900">Student Sheets</h3>
-                  </div>
-                  <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-semibold text-slate-500">
-                    {demoSheets.length} sheets
-                  </span>
-                </div>
-
-                <div className="space-y-3">
-                  {demoSheets.map((sheet, i) => (
+                {/* Error */}
+                <AnimatePresence>
+                  {errorMsg && (
                     <motion.div
-                      key={sheet.id}
-                      initial={{ opacity: 0, y: 6 }}
+                      initial={{ opacity: 0, y: -4 }}
                       animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: i * 0.06 }}
-                      className="flex items-center gap-3 rounded-2xl border border-slate-100 bg-white/[0.03] p-3"
+                      exit={{ opacity: 0 }}
+                      className="mt-3 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5"
                     >
-                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                        <User className="h-4 w-4" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <p className="truncate text-xs font-semibold text-slate-900">{sheet.studentName}</p>
-                          <StatusBadge tone={sheet.status === 'Processed' ? 'success' : 'info'} dot>
-                            {sheet.status}
-                          </StatusBadge>
-                        </div>
-                        <p className="mt-0.5 text-[10px] text-slate-500">{sheet.rollNo} · {sheet.fileName} · {sheet.size}</p>
-                        <div className="mt-2">
-                          <ProgressBar value={sheet.progress} showValue={false} height="h-1" tone={sheet.status === 'Processed' ? 'emerald' : 'blue'} />
-                        </div>
-                      </div>
+                      <AlertCircle className="h-4 w-4 shrink-0 text-rose-500 mt-px" />
+                      <p className="text-xs text-rose-700 leading-5">{errorMsg}</p>
                     </motion.div>
-                  ))}
+                  )}
+                </AnimatePresence>
+
+                {/* Upload progress */}
+                <AnimatePresence>
+                  {status === 'uploading' && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="mt-4 space-y-2"
+                    >
+                      <div className="flex justify-between text-[10px] font-semibold text-slate-600">
+                        <span>Uploading…</span>
+                        <span>{uploadPct}%</span>
+                      </div>
+                      <ProgressBar value={uploadPct} tone="blue" height="h-1.5" showValue={false} />
+                    </motion.div>
+                  )}
+
+                  {status === 'processing' && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+                        <p className="text-xs font-semibold text-blue-800">TrOCR processing…</p>
+                        <span className="ml-auto flex items-center gap-1 text-[10px] text-blue-600">
+                          <Clock className="h-3 w-3" /> {fmt(elapsed)}
+                        </span>
+                      </div>
+                      <p className="mt-1.5 text-[11px] leading-5 text-blue-700">
+                        Segmenting lines and running handwriting recognition. This can
+                        take several minutes on CPU — please keep this tab open.
+                      </p>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                <div className="mt-4 flex flex-wrap gap-2">
+                  <StatusBadge tone="info" dot>PDF only</StatusBadge>
+                  <StatusBadge tone="neutral">Max {MAX_FILE_MB} MB</StatusBadge>
+                  <StatusBadge tone="warning" dot>TrOCR · line-by-line</StatusBadge>
                 </div>
               </Card>
             </div>
 
             {/* Actions */}
             <div className="mt-5 flex items-center justify-between">
-              <Button variant="ghost" onClick={() => setPhase(1)} icon={<ArrowLeft className="h-4 w-4" />}>
+              <Button
+                variant="ghost"
+                onClick={() => setPhase(1)}
+                icon={<ArrowLeft className="h-4 w-4" />}
+                disabled={isLoading}
+              >
                 Back
               </Button>
-              <Button to="/module2/ocr" icon={<ArrowRight className="h-4 w-4" />}>
-                Start Processing
+              <Button
+                onClick={handleSubmit}
+                disabled={!file || !rollNumber.trim() || isLoading}
+                icon={isLoading
+                  ? <Loader2 className="h-4 w-4 animate-spin" />
+                  : <Upload className="h-4 w-4" />}
+              >
+                {status === 'uploading' ? `Uploading (${uploadPct}%)` :
+                 status === 'processing' ? 'Processing…' :
+                 'Extract Text'}
               </Button>
             </div>
           </div>
