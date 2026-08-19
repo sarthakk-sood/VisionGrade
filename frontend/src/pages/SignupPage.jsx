@@ -49,6 +49,7 @@ export default function SignupPage() {
           name: data.teacher.name,
           email: data.teacher.email,
           role: 'Faculty Evaluator',
+          department: data.teacher.department || '',
           institution: data.teacher.institution || 'Thapar Institute of Engineering & Technology',
         });
       }

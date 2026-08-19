@@ -99,7 +99,6 @@ const evaluateOneSheet = async (req, res, next) => {
     }
     const graded = await evaluateAnswerSheet({
       questions: session.questions,
-      ocrText: sheet.ocrRawText,
       sheetMedia,
       examInfo: {
         examTitle: session.examTitle,
@@ -123,7 +122,7 @@ const evaluateAllSheets = async (req, res, next) => {
       sessionId: session._id,
       teacherId: req.teacher._id,
       $or: [
-        { status: { $in: ['ocr_done', 'evaluated'] } },
+        { status: 'evaluated' },
         { fileUrl: { $exists: true, $ne: '' } },
       ],
     }).sort({ createdAt: 1 });
@@ -150,7 +149,6 @@ const evaluateAllSheets = async (req, res, next) => {
         }
         const graded = await evaluateAnswerSheet({
           questions: session.questions,
-          ocrText: sheet.ocrRawText,
           sheetMedia,
           examInfo: {
             examTitle: session.examTitle,
@@ -254,9 +252,76 @@ const overrideMarks = async (req, res, next) => {
   }
 };
 
+/**
+ * GET /api/evaluation/overview
+ * One row per exam session for the dashboard — evaluated/pending sheet
+ * counts and average score — without the frontend needing to call
+ * listReports() once per session.
+ */
+const getOverview = async (req, res, next) => {
+  try {
+    const teacherId = req.teacher._id;
+
+    const [reportStats, sheetStats] = await Promise.all([
+      EvaluationReport.aggregate([
+        { $match: { teacherId } },
+        {
+          $group: {
+            _id: '$sessionId',
+            evaluated: { $sum: 1 },
+            averagePercentage: { $avg: '$percentage' },
+            lastEvaluatedAt: { $max: '$updatedAt' },
+          },
+        },
+      ]),
+      AnswerSheet.aggregate([
+        { $match: { teacherId } },
+        {
+          $group: {
+            _id: '$sessionId',
+            uploaded: { $sum: 1 },
+            pending: { $sum: { $cond: [{ $eq: ['$status', 'uploaded'] }, 1, 0] } },
+          },
+        },
+      ]),
+    ]);
+
+    const sheetsBySession = new Map(sheetStats.map((s) => [String(s._id), s]));
+    const overview = reportStats.map((r) => {
+      const sheets = sheetsBySession.get(String(r._id)) || { uploaded: 0, pending: 0 };
+      sheetsBySession.delete(String(r._id));
+      return {
+        sessionId: r._id,
+        evaluated: r.evaluated,
+        pending: sheets.pending,
+        uploaded: sheets.uploaded,
+        averagePercentage: r.averagePercentage ? parseFloat(r.averagePercentage.toFixed(1)) : 0,
+        lastEvaluatedAt: r.lastEvaluatedAt,
+      };
+    });
+
+    // Sessions with uploaded sheets but zero evaluations yet.
+    for (const sheets of sheetsBySession.values()) {
+      overview.push({
+        sessionId: sheets._id,
+        evaluated: 0,
+        pending: sheets.pending,
+        uploaded: sheets.uploaded,
+        averagePercentage: 0,
+        lastEvaluatedAt: null,
+      });
+    }
+
+    return res.json({ success: true, overview });
+  } catch (err) {
+    next(err);
+  }
+};
+
 module.exports = {
   evaluateOneSheet,
   evaluateAllSheets,
   listReports,
   overrideMarks,
+  getOverview,
 };

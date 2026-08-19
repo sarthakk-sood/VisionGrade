@@ -1,6 +1,6 @@
 /**
  * UploadAnswerSheet.jsx — Module 2, Steps 1 & 2
- * Store the sheet on Cloudinary, then score from the photo (no TrOCR).
+ * Store the sheet on Cloudinary, then score from the photo with a vision LLM (no OCR).
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
@@ -314,7 +314,7 @@ export default function UploadAnswerSheet() {
                   <p className="text-xs font-semibold text-blue-800">Scored from the sheet photo</p>
                   <p className="mt-1 text-[11px] leading-5 text-blue-700">
                     The file is stored and later marked by Gemini against the Module 1
-                    marking criteria. Handwriting OCR is not used.
+                    marking criteria.
                   </p>
                 </div>
               </Card>

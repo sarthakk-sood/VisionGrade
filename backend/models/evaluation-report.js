@@ -1,5 +1,14 @@
 const mongoose = require('mongoose');
 
+/** Per-marking-criterion step-marking result: full / half / zero credit. */
+const criterionBreakdownSchema = new mongoose.Schema({
+  point:      { type: String, required: true },
+  maxMarks:   { type: Number, required: true },
+  marksAwarded: { type: Number, required: true },
+  matchLevel: { type: String, enum: ['full', 'partial', 'none'], default: 'none' },
+  matchedKeywords: [{ type: String }],
+}, { _id: false });
+
 const questionEvalSchema = new mongoose.Schema({
   questionNumber: { type: Number, required: true },
   questionText:   { type: String },
@@ -10,6 +19,7 @@ const questionEvalSchema = new mongoose.Schema({
   isOverridden:   { type: Boolean, default: false },
   overriddenMarks:{ type: Number },
   matchedKeywords: [{ type: String }],
+  criteriaBreakdown: [criterionBreakdownSchema],
   keywordCoverage:{ type: Number },
   semanticScore:  { type: Number },
   strengths:      [{ type: String }],
@@ -54,13 +64,15 @@ const evaluationReportSchema = new mongoose.Schema({
 evaluationReportSchema.index({ sessionId: 1, rollNumber: 1 });
 evaluationReportSchema.index({ answerSheetId: 1 }, { unique: true });
 
-evaluationReportSchema.pre('save', function (next) {
+// Mongoose 9 removed the next() callback from pre() middleware — async
+// functions (or plain functions returning nothing) are now the only
+// supported form. Calling next() here throws "next is not a function".
+evaluationReportSchema.pre('save', function () {
   if (this.totalMarks && this.marksObtained !== undefined) {
     this.percentage = parseFloat(
       ((this.marksObtained / this.totalMarks) * 100).toFixed(2)
     );
   }
-  next();
 });
 
 module.exports = mongoose.model('EvaluationReport', evaluationReportSchema);

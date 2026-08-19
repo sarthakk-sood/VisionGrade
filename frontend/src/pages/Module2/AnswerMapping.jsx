@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { AlertTriangle, ArrowLeft, ArrowRight, FileText } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowRight, FileText, Loader2 } from 'lucide-react';
 import Navbar        from '../../components/layout/Navbar';
 import Sidebar       from '../../components/layout/Sidebar';
 import PageContainer from '../../components/layout/PageContainer';
@@ -12,6 +12,7 @@ import EmptyState    from '../../components/common/EmptyState';
 import { useAppStore } from '../../store/useAppStore';
 import { evaluationApi } from '../../services/api';
 import { PAGE_BG } from '../../utils/theme';
+import { markingCriteriaLines } from '../../utils/markingCriteria';
 
 const M2_STEPS = ['Select Exam', 'Upload Sheets', 'Review', 'Results'];
 
@@ -119,6 +120,13 @@ export default function AnswerMapping() {
               </div>
             )}
 
+            {evaluatingId && (
+              <div className="mb-4 flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-700">
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                Scoring this student's sheet with the vision LLM — this can take up to a couple of minutes, please wait…
+              </div>
+            )}
+
             <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
               <Card>
                 <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500">Students</p>
@@ -201,12 +209,9 @@ export default function AnswerMapping() {
                             Q{q.questionNumber} · {q.marks} marks · {q.type}
                           </p>
                           <p className="mt-1 text-xs text-slate-800">{q.questionText}</p>
-                          {(q.markingCriteria?.length || q.markingScheme) && (
+                          {markingCriteriaLines(q).length > 0 && (
                             <ul className="mt-2 space-y-0.5 text-[11px] text-slate-500">
-                              {(q.markingCriteria?.length
-                                ? q.markingCriteria.map((c) => `${c.marks} mark${Number(c.marks) === 1 ? '' : 's'}: ${c.point}`)
-                                : [`Scheme: ${q.markingScheme}`]
-                              ).map((line) => (
+                              {markingCriteriaLines(q).map((line) => (
                                 <li key={line}>{line}</li>
                               ))}
                             </ul>
@@ -226,6 +231,7 @@ export default function AnswerMapping() {
               <Button
                 onClick={() => selectedSheet && handleEvaluate(selectedSheet.id)}
                 disabled={!selectedSheet || Boolean(evaluatingId) || questions.length === 0}
+                loading={Boolean(evaluatingId)}
                 icon={<ArrowRight className="h-4 w-4" />}
               >
                 {evaluatingId ? 'Scoring…' : 'Score this student'}

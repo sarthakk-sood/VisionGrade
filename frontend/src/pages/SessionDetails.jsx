@@ -17,6 +17,7 @@ import StatusBadge   from '../components/common/StatusBadge';
 import ProgressBar   from '../components/common/ProgressBar';
 import EmptyState    from '../components/common/EmptyState';
 import { PAGE_BG } from '../utils/theme';
+import { markingCriteriaLines } from '../utils/markingCriteria';
 import {
   buildSessionActivity,
   countQuestionsByType,
@@ -308,12 +309,9 @@ export default function SessionDetails() {
                               <span className="font-semibold text-slate-600">Model: </span>{q.modelAnswer}
                             </p>
                           )}
-                          {(q.markingCriteria?.length || q.markingScheme) && (
+                          {markingCriteriaLines(q).length > 0 && (
                             <ul className="mt-1 space-y-0.5 text-[10px] text-slate-500">
-                              {(q.markingCriteria?.length
-                                ? q.markingCriteria.map((c) => `${c.marks} mark${Number(c.marks) === 1 ? '' : 's'}: ${c.point}`)
-                                : [q.markingScheme]
-                              ).map((line) => (
+                              {markingCriteriaLines(q).map((line) => (
                                 <li key={line}>{line}</li>
                               ))}
                             </ul>

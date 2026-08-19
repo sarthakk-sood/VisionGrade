@@ -54,11 +54,27 @@ const criteriaToSchemeString = (criteria) =>
     .map((c) => `${c.marks} mark${Number(c.marks) === 1 ? '' : 's'}: ${c.point}`)
     .join('\n');
 
+/** MCQ / FillInTheBlanks are always all-or-nothing — no partial credit, no matter how many marks. */
+const ALL_OR_NOTHING_TYPES = new Set(['MCQ', 'FillInTheBlanks']);
+const isAllOrNothingType = (type) => ALL_OR_NOTHING_TYPES.has(type);
+
+/**
+ * Collapse to a single full-marks criterion for MCQ/FillInTheBlanks, no
+ * matter what was actually stored (guards against older sessions generated
+ * before this rule existed, where the LLM split them into multiple points).
+ */
+const enforceCriteriaForType = (type, criteria, maxMarks) => {
+  if (isAllOrNothingType(type)) {
+    return [{ point: 'Correct option/answer identified', marks: Number(maxMarks) || 0 }];
+  }
+  return criteria;
+};
+
 const resolveCriteria = (question) => {
   const maxMarks = Number(question?.marks) || 0;
   const fromField = normalizeCriteria(question?.markingCriteria, maxMarks);
-  if (fromField.length) return fromField;
-  return normalizeCriteria(question?.markingScheme, maxMarks);
+  const criteria = fromField.length ? fromField : normalizeCriteria(question?.markingScheme, maxMarks);
+  return enforceCriteriaForType(question?.type, criteria, maxMarks);
 };
 
 /**
@@ -75,4 +91,6 @@ module.exports = {
   criteriaToSchemeString,
   resolveCriteria,
   buildMarkingPayload,
+  isAllOrNothingType,
+  enforceCriteriaForType,
 };

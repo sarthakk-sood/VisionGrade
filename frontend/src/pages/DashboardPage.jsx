@@ -197,7 +197,7 @@ export default function DashboardPage() {
                         <tr>
                           <th className="px-5 py-3 font-semibold">Exam Name</th>
                           <th className="px-4 py-3 font-semibold">Students</th>
-                          <th className="px-4 py-3 font-semibold">Flagged</th>
+                          <th className="px-4 py-3 font-semibold">Pending</th>
                           <th className="px-4 py-3 font-semibold">Avg Score</th>
                           <th className="px-4 py-3 font-semibold">Date</th>
                         </tr>
@@ -223,10 +223,10 @@ export default function DashboardPage() {
                               </td>
                               <td className="px-4 py-3.5 text-slate-600">{s.studentsEvaluated}</td>
                               <td className="px-4 py-3.5">
-                                {s.flaggedResponses > 0 ? (
+                                {s.pendingSheets > 0 ? (
                                   <span className="flex items-center gap-1 text-amber-700 font-semibold">
                                     <AlertTriangle className="h-3 w-3" />
-                                    {s.flaggedResponses}
+                                    {s.pendingSheets}
                                   </span>
                                 ) : (
                                   <span className="text-slate-600">—</span>

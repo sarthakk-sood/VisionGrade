@@ -3,6 +3,8 @@
  * Used by both llmService.js and questionGenerationService.js.
  */
 
+const OpenAI = require('openai');
+
 /** Groq free tier allows ~6000 tokens/request — keep input well under that. */
 const GROQ_TOPIC_INPUT_CHARS = 8_000;
 const GROQ_GENERATION_INPUT_CHARS = 10_000;
@@ -30,6 +32,44 @@ const GEMINI_MODELS = (process.env.GEMINI_MODELS || 'gemini-2.5-flash')
 
 /** Pause between generation batches to stay under Groq TPM on free tier. */
 const LLM_BATCH_PAUSE_MS = Number(process.env.LLM_BATCH_PAUSE_MS) || 1_200;
+
+/**
+ * Third-tier fallback when Groq AND Gemini are both rate-limited/unavailable.
+ * OpenRouter (https://openrouter.ai) is OpenAI-compatible, so it reuses the
+ * same chat.completions.create() call shape as Groq.
+ *
+ * OpenRouter regularly retires/renames its free-tier model slugs — if these
+ * start 404ing, list current free models with:
+ *   curl https://openrouter.ai/api/v1/models | jq '.data[] | select(.id | endswith(":free"))'
+ */
+const OPENROUTER_MODEL = process.env.OPENROUTER_MODEL || 'openai/gpt-oss-20b:free';
+
+/** First model in the list is tried first; later ones are used if it 404s or hits its own rate limit. */
+const OPENROUTER_VISION_MODELS = (process.env.OPENROUTER_VISION_MODEL || 'nvidia/nemotron-nano-12b-v2-vl:free,google/gemma-4-26b-a4b-it:free')
+  .split(',')
+  .map((s) => s.trim())
+  .filter(Boolean);
+/** @deprecated use OPENROUTER_VISION_MODELS — kept for any code still importing the single-model name. */
+const OPENROUTER_VISION_MODEL = OPENROUTER_VISION_MODELS[0];
+
+let _openrouter = null;
+const getOpenRouter = () => {
+  if (!_openrouter) {
+    if (!process.env.OPENROUTER_API_KEY) throw new Error('OPENROUTER_API_KEY is not set');
+    _openrouter = new OpenAI({
+      apiKey: process.env.OPENROUTER_API_KEY,
+      baseURL: 'https://openrouter.ai/api/v1',
+      defaultHeaders: {
+        'HTTP-Referer': 'https://github.com/sarthakk-sood/VisionGrade',
+        'X-Title': 'VisionGrade',
+      },
+    });
+  }
+  return _openrouter;
+};
+
+const hasOpenRouter = () =>
+  Boolean(process.env.OPENROUTER_API_KEY && process.env.OPENROUTER_API_KEY !== '...');
 
 /**
  * Groq model used across topic detection, question generation, and answers.
@@ -68,6 +108,18 @@ const isJsonValidationError = (err) => {
       msg.includes('json_validate_failed') ||
       msg.includes('invalid json'))
   );
+};
+
+/**
+ * A 413 "request too large" is deterministic — the same input will fail again
+ * no matter how many times or how long we wait, so retrying on the SAME
+ * provider is pure wasted time. Callers should skip straight to the next
+ * provider instead of backing off and retrying.
+ */
+const isSizeLimitError = (err) => {
+  const msg = (err?.message || '').toLowerCase();
+  const status = err?.status || err?.statusCode || 0;
+  return status === 413 || msg.includes('413') || msg.includes('too large');
 };
 
 /**
@@ -272,6 +324,12 @@ module.exports = {
   MIN_EVIDENCE_CHARS_PER_TOPIC,
   GROQ_MODEL,
   GEMINI_MODELS,
+  OPENROUTER_MODEL,
+  OPENROUTER_VISION_MODEL,
+  OPENROUTER_VISION_MODELS,
+  getOpenRouter,
+  hasOpenRouter,
+  isSizeLimitError,
   LLM_BATCH_PAUSE_MS,
   isReasoningGroqModel,
   estimateGroqMaxTokens,

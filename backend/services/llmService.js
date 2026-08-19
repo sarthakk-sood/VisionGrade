@@ -4,7 +4,11 @@ const {
   GROQ_TOPIC_INPUT_CHARS,
   GROQ_MODEL,
   GEMINI_MODELS,
+  OPENROUTER_MODEL,
+  getOpenRouter,
+  hasOpenRouter,
   groqChatJsonCompletion,
+  extractChatContent,
   isModelAccessError,
   isQuotaError,
   parseProviderRetryDelay,
@@ -137,18 +141,26 @@ const detectTopicsWithGroq = async (extractedTexts, subject) => {
   const groq = getGroq();
   const userPrompt = buildUserPrompt(extractedTexts, subject);
 
+  // Up to 30 topics can come back (see prompt rules) — 1536 tokens was cutting
+  // the JSON off mid-array on documents that yield many topics.
   const response = await groqChatJsonCompletion(groq, {
     model: GROQ_MODEL,
     temperature: 0.2,
-    max_tokens: 1536,
+    max_tokens: 3072,
     messages: [
       { role: 'system', content: TOPIC_DETECTION_SYSTEM_PROMPT },
       { role: 'user', content: userPrompt },
     ],
   });
 
-  const raw = response.choices[0]?.message?.content;
+  const { content: raw, finishReason } = extractChatContent(response);
   if (!raw) throw new Error('Groq returned an empty response');
+  if (finishReason === 'length') {
+    // Response was cut off before the JSON closed — retrying the same
+    // request won't help much, so surface this as a fallback-worthy error
+    // instead of a confusing "invalid JSON" message.
+    throw new Error('Groq response truncated before completing (finish_reason: length) — too many topics for the token budget');
+  }
 
   const result = parseTopicsResponse(raw);
   return {
@@ -221,10 +233,46 @@ const detectTopicsWithGemini = async (extractedTexts, subject) => {
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
+// OpenRouter fallback — third tier, used when both Groq and Gemini are
+// rate-limited/unavailable. OpenAI-compatible chat.completions API.
+// ─────────────────────────────────────────────────────────────────────────────
+const detectTopicsWithOpenRouter = async (extractedTexts, subject) => {
+  const openrouter = getOpenRouter();
+  const userPrompt = buildUserPrompt(extractedTexts, subject);
+
+  let lastErr;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const response = await openrouter.chat.completions.create({
+        model: OPENROUTER_MODEL,
+        temperature: 0.2,
+        max_tokens: 3072,
+        messages: [
+          { role: 'system', content: TOPIC_DETECTION_SYSTEM_PROMPT },
+          { role: 'user', content: userPrompt },
+        ],
+      });
+      const { content, finishReason } = extractChatContent(response);
+      if (!content) throw new Error('OpenRouter returned an empty response');
+      if (finishReason === 'length') {
+        throw new Error('OpenRouter response truncated before completing (finish_reason: length)');
+      }
+      const result = parseTopicsResponse(content);
+      return { ...result, provider: `openrouter-${OPENROUTER_MODEL}`, usage: null };
+    } catch (err) {
+      lastErr = err;
+      if (!isQuotaError(err) || attempt === 2) throw err;
+      await sleep(parseProviderRetryDelay(err.message, attempt));
+    }
+  }
+  throw lastErr;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // detectTopics  —  PUBLIC API
 //
 // Tries Groq first. On a 429 quota error it automatically falls back to
-// Gemini (with retry + lite-model fallback). Any other error is re-thrown.
+// Gemini, then to OpenRouter if that also fails. Any other error is re-thrown.
 //
 //   extractedTexts : string[]  — one entry per source document
 //   subject        : string    — optional hint (e.g. "Data Structures")
@@ -238,22 +286,31 @@ const detectTopics = async (extractedTexts, subject = '') => {
     return result;
 
   } catch (groqErr) {
-    if (isQuotaError(groqErr)) {
-      console.warn('[llmService] Groq quota exceeded (429). Falling back to Gemini…');
-      try {
-        const result = await detectTopicsWithGemini(extractedTexts, subject);
-        console.log(`[llmService] Gemini fallback succeeded — ${result.topics.length} topics found`);
-        return result;
-      } catch (geminiErr) {
-        console.error('[llmService] Gemini fallback also failed:', geminiErr.message);
+    const truncated = (groqErr.message || '').includes('truncated');
+    if (!isQuotaError(groqErr) && !truncated) throw groqErr;
+
+    console.warn(`[llmService] Groq ${truncated ? 'response truncated' : 'quota exceeded (429)'}. Falling back to Gemini…`);
+    try {
+      const result = await detectTopicsWithGemini(extractedTexts, subject);
+      console.log(`[llmService] Gemini fallback succeeded — ${result.topics.length} topics found`);
+      return result;
+    } catch (geminiErr) {
+      if (!hasOpenRouter()) {
         throw new Error(
           `Both LLM providers failed.\n• Groq: ${groqErr.message}\n• Gemini: ${geminiErr.message}`
         );
       }
+      console.warn('[llmService] Gemini fallback also failed. Trying OpenRouter…', geminiErr.message);
+      try {
+        const result = await detectTopicsWithOpenRouter(extractedTexts, subject);
+        console.log(`[llmService] OpenRouter fallback succeeded — ${result.topics.length} topics found`);
+        return result;
+      } catch (openrouterErr) {
+        throw new Error(
+          `All LLM providers failed.\n• Groq: ${groqErr.message}\n• Gemini: ${geminiErr.message}\n• OpenRouter: ${openrouterErr.message}`
+        );
+      }
     }
-
-    // Non-quota error — re-throw as-is
-    throw groqErr;
   }
 };
 

@@ -18,6 +18,7 @@ function loadStoredUser() {
       name: teacher.name || 'Faculty User',
       email: teacher.email || '',
       role: 'Faculty Evaluator',
+      department: teacher.department || '',
       institution: teacher.institution || 'Thapar Institute of Engineering & Technology',
     };
   } catch {
@@ -84,9 +85,11 @@ const mapApiSession = (s, questions = null) => {
     dateCreated:   s.finalizedAt || s.createdAt || null,
     status:        displaySessionStatus(s.status),
     rawStatus:     s.status || 'finalized',
+    // Filled in from /evaluation/overview once sessions are loaded (see loadSessionsFromBackend).
     studentsEvaluated: 0,
-    flaggedResponses:  0,
+    pendingSheets:     0,
     avgScore: 0,
+    evaluationDate: null,
     answerProvider: s.answerProvider || null,
     sessionQuestions:  qs,
     hasModelAnswers: Boolean(qs?.length) || Boolean(s.hasAnswerKey) || Boolean(s.answerProvider),
@@ -834,10 +837,34 @@ export const useAppStore = create((set, get) => ({
         examSessions: mapped,
         selectedSessionId: state.selectedSessionId || mapped[0]?.id || null,
       }));
+      get().loadEvaluationOverview();
       return mapped;
     } catch {
       set({ sessionsLoading: false });
       return [];
+    }
+  },
+
+  /** Merges real Module 2 evaluation stats (evaluated/pending/avg score) into examSessions. */
+  loadEvaluationOverview: async () => {
+    try {
+      const data = await evaluationApi.overview();
+      const bySession = new Map((data.overview || []).map((o) => [String(o.sessionId), o]));
+      set((state) => ({
+        examSessions: state.examSessions.map((sess) => {
+          const o = bySession.get(String(sess.id));
+          if (!o) return sess;
+          return {
+            ...sess,
+            studentsEvaluated: o.evaluated,
+            pendingSheets: o.pending,
+            avgScore: o.averagePercentage,
+            evaluationDate: o.lastEvaluatedAt,
+          };
+        }),
+      }));
+    } catch {
+      // Non-critical — dashboard just falls back to zeros for eval stats.
     }
   },
 

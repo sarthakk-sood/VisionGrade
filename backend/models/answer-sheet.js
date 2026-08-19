@@ -1,30 +1,10 @@
 /**
- * answer-sheet.js — Module 2: one student's uploaded sheet + OCR result.
- * Original file is stored on Cloudinary; OCR text lives here for evaluation.
+ * answer-sheet.js — Module 2: one student's uploaded answer sheet.
+ * The file is stored on Cloudinary; scoring reads the photo/PDF directly
+ * with a vision LLM (Gemini, falling back to Groq). No OCR text is stored.
  */
 
 const mongoose = require('mongoose');
-
-const lineResultSchema = new mongoose.Schema({
-  lineNumber: { type: Number, required: true },
-  text:       { type: String, default: '' },
-  confidence: { type: Number, default: 0 },
-  bbox:       { type: [Number], default: [] },
-}, { _id: false });
-
-const pageResultSchema = new mongoose.Schema({
-  pageNumber: { type: Number, required: true },
-  text:       { type: String, default: '' },
-  confidence: { type: Number, default: 0 },
-  lines:      { type: [lineResultSchema], default: [] },
-}, { _id: false });
-
-const lowConfLineSchema = new mongoose.Schema({
-  page:       { type: Number },
-  lineNumber: { type: Number },
-  text:       { type: String },
-  confidence: { type: Number },
-}, { _id: false });
 
 const answerSheetSchema = new mongoose.Schema({
   teacherId: {
@@ -51,18 +31,9 @@ const answerSheetSchema = new mongoose.Schema({
   filePublicId:     { type: String, default: '' },
   fileResourceType: { type: String, default: '' },
 
-  pages:     { type: [pageResultSchema], default: [] },
-  pageCount: { type: Number, default: 0 },
-  ocrRawText:    { type: String, default: '' },
-  ocrConfidence: { type: Number, default: 0 },
-  ocrError:      { type: String, default: '' },
-
-  lowConfidenceLines: { type: [lowConfLineSchema], default: [] },
-  isFlaggedForReview: { type: Boolean, default: false },
-
   status: {
     type: String,
-    enum: ['uploaded', 'ocr_done', 'evaluated'],
+    enum: ['uploaded', 'evaluated'],
     default: 'uploaded',
   },
 }, { timestamps: true });

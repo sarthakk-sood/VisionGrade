@@ -4,6 +4,10 @@ const {
   EVIDENCE_CHARS_PER_BATCH,
   GROQ_MODEL,
   GEMINI_MODELS,
+  OPENROUTER_MODEL,
+  getOpenRouter,
+  hasOpenRouter,
+  isSizeLimitError,
   LLM_BATCH_PAUSE_MS,
   groqChatJsonCompletion,
   estimateGroqMaxTokens,
@@ -17,6 +21,7 @@ const {
 const {
   normalizeCriteria,
   criteriaToSchemeString,
+  enforceCriteriaForType,
 } = require('../utils/markingCriteria');
 const {
   buildCorpus,
@@ -77,7 +82,9 @@ Each question comes with VERBATIM EXCERPTS from those documents. The excerpts ar
 - LongAnswer: numbered sub-parts matching the question; include derivations/steps where the question asks for them.
 
 For every question return:
-- markingCriteria: array of { point, marks }. Points must sum to exactly the question's marks.
+- markingCriteria: array of { point, marks }.
+  - MCQ and FillInTheBlanks are ALL-OR-NOTHING, regardless of how many marks the question is worth: return EXACTLY ONE entry — point: "Correct option/answer identified", marks: the question's full marks. NEVER split an MCQ or FillInTheBlanks question into multiple criteria — there is no partial credit for these types no matter how many marks they carry.
+  - For every other type, points must sum to exactly the question's marks.
 - markingScheme: the same breakdown as a short bullet string (for the printed answer key).
 - explanation: 1-2 sentences for the teacher citing the source content.
 
@@ -173,8 +180,14 @@ const parseAnswerResponse = (raw, batchQuestions, startIndex) => {
     // Prefer an exact global-number match; fall back to local position
     const llm = byGlobalNum.get(globalNum) || byLocalNum.get(localNum) || {};
     const maxMarks = Number(batchQuestions[i].marks) || 0;
-    const markingCriteria = normalizeCriteria(
-      llm.markingCriteria?.length ? llm.markingCriteria : llm.markingScheme,
+    const type = batchQuestions[i].type;
+
+    // Guardrail independent of the prompt: MCQ/FillInTheBlanks are always
+    // all-or-nothing, no matter how many (or few) criteria points the LLM
+    // actually returned — collapse to exactly one entry worth full marks.
+    const markingCriteria = enforceCriteriaForType(
+      type,
+      normalizeCriteria(llm.markingCriteria?.length ? llm.markingCriteria : llm.markingScheme, maxMarks),
       maxMarks
     );
     merged.push({
@@ -223,6 +236,10 @@ const callGroq = async (batchQuestions, corpus, examInfo, startIndex) => {
       };
     } catch (err) {
       lastErr = err;
+      if (isSizeLimitError(err)) {
+        console.warn('[answerGenerationService] Groq batch too large for TPM limit, falling back…');
+        break;
+      }
       if (isQuotaError(err) && attempt < 4) {
         const delayMs = parseProviderRetryDelay(err.message, attempt);
         console.warn(
@@ -271,6 +288,38 @@ const callGemini = async (batchQuestions, corpus, examInfo, startIndex) => {
   throw lastErr;
 };
 
+/** Third-tier fallback when both Groq and Gemini are rate-limited/unavailable. */
+const callOpenRouter = async (batchQuestions, corpus, examInfo, startIndex) => {
+  const openrouter = getOpenRouter();
+  const messages = [
+    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'user', content: buildUserPrompt(batchQuestions, corpus, examInfo, startIndex) },
+  ];
+
+  let lastErr;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const response = await openrouter.chat.completions.create({
+        model: OPENROUTER_MODEL,
+        temperature: 0.25,
+        max_tokens: estimateMaxTokens(batchQuestions),
+        messages,
+      });
+      const { content } = extractChatContent(response);
+      if (!content) throw new Error('OpenRouter returned an empty response');
+      return {
+        answers: parseAnswerResponse(content, batchQuestions, startIndex),
+        provider: `openrouter-${OPENROUTER_MODEL}`,
+      };
+    } catch (err) {
+      lastErr = err;
+      if (!isQuotaError(err) || attempt === 2) throw err;
+      await sleep(parseProviderRetryDelay(err.message, attempt));
+    }
+  }
+  throw lastErr;
+};
+
 const generateBatch = async (batchQuestions, corpus, examInfo, startIndex) => {
   try {
     return await callGroq(batchQuestions, corpus, examInfo, startIndex);
@@ -279,9 +328,19 @@ const generateBatch = async (batchQuestions, corpus, examInfo, startIndex) => {
     try {
       return await callGemini(batchQuestions, corpus, examInfo, startIndex);
     } catch (geminiErr) {
-      throw new Error(
-        `Answer batch failed.\n• Groq: ${groqErr.message}\n• Gemini: ${geminiErr.message}`
-      );
+      if (!hasOpenRouter()) {
+        throw new Error(
+          `Answer batch failed.\n• Groq: ${groqErr.message}\n• Gemini: ${geminiErr.message}`
+        );
+      }
+      console.warn(`[answerGenerationService] Gemini batch failed (Q${startIndex + 1}+), trying OpenRouter…`, geminiErr.message);
+      try {
+        return await callOpenRouter(batchQuestions, corpus, examInfo, startIndex);
+      } catch (openrouterErr) {
+        throw new Error(
+          `Answer batch failed.\n• Groq: ${groqErr.message}\n• Gemini: ${geminiErr.message}\n• OpenRouter: ${openrouterErr.message}`
+        );
+      }
     }
   }
 };

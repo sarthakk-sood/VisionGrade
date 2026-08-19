@@ -17,6 +17,14 @@ const M2_STEPS = ['Select Exam', 'Upload Sheets', 'Review', 'Results'];
 const scoreColor = (p) =>
   p >= 80 ? 'text-emerald-700' : p >= 60 ? 'text-amber-700' : 'text-rose-600';
 
+const MATCH_LEVEL_STYLE = {
+  full:    'border-emerald-200 bg-emerald-50 text-emerald-700',
+  partial: 'border-amber-200 bg-amber-50 text-amber-700',
+  none:    'border-rose-200 bg-rose-50 text-rose-600',
+};
+
+const MATCH_LEVEL_LABEL = { full: 'Full', partial: 'Half', none: 'Missed' };
+
 export default function EvaluationPage() {
   const selectedSessionId = useAppStore((s) => s.selectedSessionId);
   const examSessions = useAppStore((s) => s.examSessions);
@@ -60,7 +68,7 @@ export default function EvaluationPage() {
     setDraftMarks(next);
   }, [selectedReport]);
 
-  const unevaluated = answerSheets.filter((s) => s.status === 'ocr_done' || s.status === 'uploaded').length;
+  const unevaluated = answerSheets.filter((s) => s.status === 'uploaded').length;
 
   const handleEvaluateAll = async () => {
     if (!selectedSessionId) return;
@@ -250,6 +258,26 @@ export default function EvaluationPage() {
                             {row.studentAnswer}
                           </p>
                         ) : null}
+
+                        {row.criteriaBreakdown?.length > 0 && (
+                          <div className="mt-2 space-y-1">
+                            <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                              Step marking
+                            </p>
+                            {row.criteriaBreakdown.map((c, i) => (
+                              <div
+                                key={`${row.questionNumber}-${i}`}
+                                className={`flex items-center justify-between gap-2 rounded-lg border px-2 py-1 text-[10px] ${MATCH_LEVEL_STYLE[c.matchLevel] || MATCH_LEVEL_STYLE.none}`}
+                              >
+                                <span className="truncate">{c.point}</span>
+                                <span className="shrink-0 font-semibold">
+                                  {MATCH_LEVEL_LABEL[c.matchLevel] || 'Missed'} · {c.marksAwarded}/{c.maxMarks}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+
                         {row.matchedKeywords?.length > 0 && (
                           <p className="mt-1 text-[10px] text-emerald-700">
                             Keywords: {row.matchedKeywords.slice(0, 8).join(', ')}

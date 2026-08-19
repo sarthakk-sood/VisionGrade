@@ -5,12 +5,14 @@ const {
   evaluateAllSheets,
   listReports,
   overrideMarks,
+  getOverview,
 } = require('../controllers/evaluationController');
 
 const router = express.Router();
 
 router.use(protect);
 
+router.get('/overview', getOverview);
 router.post('/sheets/:sheetId', evaluateOneSheet);
 router.post('/sessions/:sessionId/evaluate-all', evaluateAllSheets);
 router.get('/sessions/:sessionId', listReports);

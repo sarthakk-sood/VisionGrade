@@ -13,8 +13,6 @@ const {
   extractAnswerSheet,
   listAnswerSheets,
   getAnswerSheet,
-  updateOcrText,
-  ocrServiceHealth,
 } = require('../controllers/ocrController');
 
 const router = express.Router();
@@ -51,10 +49,8 @@ const upload = multer({
   },
 });
 
-router.get('/service-health', ocrServiceHealth);
 router.get('/session/:sessionId', protect, listAnswerSheets);
 router.post('/extract', protect, upload.single('pdf'), extractAnswerSheet);
-router.patch('/:sheetId/text', protect, updateOcrText);
 router.get('/:sheetId', protect, getAnswerSheet);
 
 module.exports = router;

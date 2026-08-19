@@ -1,6 +1,7 @@
 /**
  * ocrController.js — Module 2: upload and store a student answer sheet.
- * Scoring reads the photo with Gemini; TrOCR is not used.
+ * Scoring reads the photo directly with a vision LLM (Gemini, then Groq as
+ * fallback). No OCR is performed at upload time.
  */
 
 const fs          = require('fs');
@@ -90,13 +91,6 @@ const extractAnswerSheet = async (req, res, next) => {
         fileResourceType: storedFile.resourceType,
         status: 'uploaded',
         evaluationId: null,
-        pages: [],
-        pageCount: 0,
-        ocrRawText: '',
-        ocrConfidence: 0,
-        lowConfidenceLines: [],
-        isFlaggedForReview: false,
-        ocrError: '',
       },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
@@ -106,7 +100,7 @@ const extractAnswerSheet = async (req, res, next) => {
 
   return res.status(200).json({
     success: true,
-    message: 'Answer sheet stored. Scoring will read the photo against the marking scheme.',
+    message: 'Answer sheet stored. Scoring will read the photo/PDF with a vision LLM against the marking scheme.',
     data: {
       answerSheetId: sheetDoc?._id ?? null,
       rollNumber: rollNumber.trim(),
@@ -124,8 +118,7 @@ const listAnswerSheets = async (req, res, next) => {
       teacherId: req.teacher._id,
       sessionId: session._id,
     })
-      .sort({ createdAt: 1 })
-      .select('-pages');
+      .sort({ createdAt: 1 });
 
     return res.json({
       success: true,
@@ -134,15 +127,10 @@ const listAnswerSheets = async (req, res, next) => {
         rollNumber: s.rollNumber,
         studentName: s.studentName,
         status: s.status,
-        pageCount: s.pageCount,
-        ocrConfidence: s.ocrConfidence,
-        isFlaggedForReview: s.isFlaggedForReview,
-        lowConfidenceCount: s.lowConfidenceLines?.length || 0,
         fileUrl: s.fileUrl,
         mimeType: s.mimeType,
         originalFilename: s.originalFilename,
         evaluationId: s.evaluationId,
-        ocrError: s.ocrError,
         createdAt: s.createdAt,
       })),
     });
@@ -168,40 +156,6 @@ const getAnswerSheet = async (req, res, next) => {
   }
 };
 
-const updateOcrText = async (req, res, next) => {
-  try {
-    const sheet = await AnswerSheet.findById(req.params.sheetId);
-    if (!sheet) {
-      return res.status(404).json({ success: false, error: 'Answer sheet not found' });
-    }
-    if (sheet.teacherId.toString() !== req.teacher._id.toString()) {
-      return res.status(403).json({ success: false, error: 'Not authorised' });
-    }
-
-    const { ocrRawText, pages } = req.body || {};
-    if (typeof ocrRawText === 'string') {
-      sheet.ocrRawText = ocrRawText;
-    }
-    if (Array.isArray(pages)) {
-      sheet.pages = pages;
-      sheet.pageCount = pages.length;
-    }
-    sheet.isFlaggedForReview = false;
-    await sheet.save();
-
-    return res.json({ success: true, data: sheet });
-  } catch (err) {
-    next(err);
-  }
-};
-
-const ocrServiceHealth = async (_req, res) => {
-  return res.json({
-    success: true,
-    detail: 'TrOCR is not used. Sheets are scored from the uploaded photo.',
-  });
-};
-
 function _cleanFile(filePath) {
   try { if (filePath) fs.unlinkSync(filePath); } catch { /* ignore */ }
 }
@@ -210,6 +164,4 @@ module.exports = {
   extractAnswerSheet,
   listAnswerSheets,
   getAnswerSheet,
-  updateOcrText,
-  ocrServiceHealth,
 };

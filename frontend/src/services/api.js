@@ -10,9 +10,11 @@ export const api = axios.create({
 /**
  * Question generation and answer generation run the LLM once per small batch of
  * questions so each batch can be given the source passages it needs, so a full
- * paper takes several sequential calls.
+ * paper takes several sequential calls. Each batch can itself fall back across
+ * three providers (Groq → Gemini → OpenRouter) before it succeeds, so this
+ * needs real headroom for larger exams.
  */
-const LLM_BATCH_TIMEOUT = 6 * 60 * 1000;
+const LLM_BATCH_TIMEOUT = 10 * 60 * 1000;
 
 // ── Auth interceptor — attach JWT from localStorage automatically ─────────────
 api.interceptors.request.use((config) => {
@@ -165,6 +167,12 @@ export const authApi = {
 
   getMe: () =>
     api.get('/auth/me').then((r) => r.data),
+
+  updateProfile: (payload) =>
+    api.patch('/auth/profile', payload).then((r) => r.data),
+
+  changePassword: (payload) =>
+    api.patch('/auth/password', payload).then((r) => r.data),
 };
 
 // ── Answer Sheet API (Module 2) ───────────────────────────────────────────────
@@ -191,9 +199,6 @@ export const ocrApi = {
 
   listBySession: (sessionId) =>
     api.get(`/ocr/session/${sessionId}`).then((r) => r.data),
-
-  updateText: (sheetId, payload) =>
-    api.patch(`/ocr/${sheetId}/text`, payload).then((r) => r.data),
 };
 
 const EVAL_TIMEOUT = 20 * 60 * 1000;
@@ -211,4 +216,8 @@ export const evaluationApi = {
 
   override: (reportId, overrides) =>
     api.patch(`/evaluation/reports/${reportId}/override`, { overrides }).then((r) => r.data),
+
+  /** One row per session — evaluated/pending sheet counts + average score, for the dashboard. */
+  overview: () =>
+    api.get('/evaluation/overview').then((r) => r.data),
 };

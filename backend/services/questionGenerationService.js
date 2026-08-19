@@ -5,6 +5,10 @@ const {
   MIN_EVIDENCE_CHARS_PER_TOPIC,
   GROQ_MODEL,
   GEMINI_MODELS,
+  OPENROUTER_MODEL,
+  getOpenRouter,
+  hasOpenRouter,
+  isSizeLimitError,
   LLM_BATCH_PAUSE_MS,
   groqChatJsonCompletion,
   isJsonValidationError,
@@ -324,6 +328,13 @@ const callGroq = async (systemPrompt, userPrompt, questionCount) => {
     } catch (err) {
       lastErr = err;
 
+      // 413 "too large" is deterministic — retrying the same request wastes
+      // time. Bail immediately so the caller can fall back to Gemini/OpenRouter.
+      if (isSizeLimitError(err)) {
+        console.warn('[questionGenerationService] Groq batch too large for TPM limit, falling back…');
+        break;
+      }
+
       if (isQuotaError(err) && attempt < maxAttempts - 1) {
         const delayMs = parseProviderRetryDelay(err.message, attempt);
         console.warn(
@@ -395,6 +406,38 @@ const callGemini = async (systemPrompt, userPrompt) => {
 const hasGemini = () =>
   Boolean(process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY !== '...');
 
+/** Third-tier fallback when both Groq and Gemini are rate-limited/unavailable. */
+const callOpenRouter = async (systemPrompt, userPrompt) => {
+  const openrouter = getOpenRouter();
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: userPrompt },
+  ];
+
+  let lastErr;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const response = await openrouter.chat.completions.create({
+        model: OPENROUTER_MODEL,
+        temperature: 0.3,
+        max_tokens: 8192,
+        messages,
+      });
+      const { content } = extractChatContent(response);
+      if (!content) throw new Error('OpenRouter returned an empty response');
+      return { questions: parseBatchResponse(content), provider: `openrouter-${OPENROUTER_MODEL}`, usage: null };
+    } catch (err) {
+      lastErr = err;
+      if (!isQuotaError(err) || attempt === 2) throw err;
+      console.warn(
+        `[questionGenerationService] OpenRouter rate-limited, waiting…`
+      );
+      await sleep(parseProviderRetryDelay(err.message, attempt));
+    }
+  }
+  throw lastErr;
+};
+
 const callWithFallback = async (systemPrompt, userPrompt, questionCount) => {
   try {
     return await callGroq(systemPrompt, userPrompt, questionCount);
@@ -403,6 +446,10 @@ const callWithFallback = async (systemPrompt, userPrompt, questionCount) => {
     if (status === 401) throw groqErr;
 
     if (!hasGemini()) {
+      if (hasOpenRouter()) {
+        console.warn('[questionGenerationService] Groq failed, falling back to OpenRouter…', groqErr.message);
+        return await callOpenRouter(systemPrompt, userPrompt);
+      }
       throw groqErr;
     }
 
@@ -410,14 +457,25 @@ const callWithFallback = async (systemPrompt, userPrompt, questionCount) => {
     try {
       return await callGemini(systemPrompt, userPrompt);
     } catch (geminiErr) {
-      if (isModelAccessError(geminiErr)) {
+      if (!hasOpenRouter()) {
+        if (isModelAccessError(geminiErr)) {
+          throw new Error(
+            `Question generation failed.\n• Groq: ${groqErr.message}\n• Gemini: API access denied — check GEMINI_API_KEY at https://aistudio.google.com/app/apikey and set GEMINI_MODELS=gemini-2.5-flash in .env`
+          );
+        }
         throw new Error(
-          `Question generation failed.\n• Groq: ${groqErr.message}\n• Gemini: API access denied — check GEMINI_API_KEY at https://aistudio.google.com/app/apikey and set GEMINI_MODELS=gemini-2.5-flash in .env`
+          `All LLM providers failed.\n• Groq: ${groqErr.message}\n• Gemini: ${geminiErr.message}`
         );
       }
-      throw new Error(
-        `All LLM providers failed.\n• Groq: ${groqErr.message}\n• Gemini: ${geminiErr.message}`
-      );
+
+      console.warn('[questionGenerationService] Gemini failed, falling back to OpenRouter…', geminiErr.message);
+      try {
+        return await callOpenRouter(systemPrompt, userPrompt);
+      } catch (openrouterErr) {
+        throw new Error(
+          `All LLM providers failed.\n• Groq: ${groqErr.message}\n• Gemini: ${geminiErr.message}\n• OpenRouter: ${openrouterErr.message}`
+        );
+      }
     }
   }
 };

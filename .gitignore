@@ -1,7 +1,6 @@
 # Dependencies
 frontend/node_modules/
 backend/node_modules/
-ocr_service/.venv/
 
 # Build output
 frontend/dist/
@@ -30,5 +29,4 @@ Thumbs.db
 *.temp
 
 # Python
-ocr_service/__pycache__/
 *.pyc

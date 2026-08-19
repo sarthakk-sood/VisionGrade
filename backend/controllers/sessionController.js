@@ -2,7 +2,7 @@ const Project = require('../models/Project');
 const ExamSession = require('../models/ExamSession');
 const SourceDocument = require('../models/sourceDocument');
 const { generateModelAnswers } = require('../services/answerGenerationService');
-const { criteriaToSchemeString, normalizeCriteria } = require('../utils/markingCriteria');
+const { criteriaToSchemeString, normalizeCriteria, enforceCriteriaForType } = require('../utils/markingCriteria');
 const { buildQuestionPaperLatex, buildAnswerKeyLatex } = require('../services/latexExportService');
 const { compileLatexToPdf } = require('../services/latexCompileService');
 const { sanitizeFilename } = require('../utils/latexEscape');
@@ -84,9 +84,11 @@ const collectSourceDocuments = async (project) => {
 const buildFallbackAnswers = (approvedPayload) =>
   approvedPayload.map((q, i) => {
     const markingCriteria = normalizeCriteria(q.markingCriteria || q.markingScheme, q.marks);
-    const fallback = markingCriteria.length
-      ? markingCriteria
-      : [{ point: 'Accurate complete answer', marks: Number(q.marks) || 0 }];
+    const fallback = enforceCriteriaForType(
+      q.type,
+      markingCriteria.length ? markingCriteria : [{ point: 'Accurate complete answer', marks: Number(q.marks) || 0 }],
+      q.marks
+    );
     return {
       questionNumber: i + 1,
       correctAnswer:  q.correctAnswer || '',
@@ -197,7 +199,7 @@ const finalizeSession = async (req, res, next) => {
         options:          q.options || [],
         correctAnswer:    llm.correctAnswer || q.correctAnswer || '',
         modelAnswer:      llm.modelAnswer || q.correctAnswer || q.explanation || '',
-        markingCriteria:  llm.markingCriteria || [],
+        markingCriteria:  enforceCriteriaForType(q.type, llm.markingCriteria || [], q.marks),
         markingScheme:    llm.markingScheme
           || criteriaToSchemeString(llm.markingCriteria)
           || `Full marks (${q.marks}): accurate complete answer.`,

@@ -22,25 +22,45 @@ export const relativeTime = (dateStr) => {
 export const buildDashboardStats = (sessions = []) => {
   const totalQuestions = sessions.reduce((s, x) => s + (x.questionCount || 0), 0);
   const withAnswers = sessions.filter((s) => s.hasModelAnswers).length;
+  const totalEvaluated = sessions.reduce((s, x) => s + (x.studentsEvaluated || 0), 0);
+  const totalPending = sessions.reduce((s, x) => s + (x.pendingSheets || 0), 0);
   return [
     { label: 'Exam Sessions', value: String(sessions.length), delta: sessions.length ? 'Your finalized papers' : 'Create your first exam' },
     { label: 'Questions Finalized', value: String(totalQuestions), delta: sessions.length ? 'Across all sessions' : '—' },
     { label: 'Answer Keys Ready', value: String(withAnswers), delta: withAnswers ? 'Export as LaTeX PDF' : 'Finalize a session first' },
-    { label: 'Sheets Evaluated', value: '—', delta: 'Available in Module 2' },
+    {
+      label: 'Sheets Evaluated',
+      value: String(totalEvaluated),
+      delta: totalPending ? `${totalPending} pending review` : totalEvaluated ? 'All caught up' : 'Upload sheets in Module 2',
+    },
   ];
 };
 
-export const buildActivityTimeline = (sessions = []) =>
-  [...sessions]
-    .sort((a, b) => new Date(b.dateCreated || 0) - new Date(a.dateCreated || 0))
-    .slice(0, 8)
+export const buildActivityTimeline = (sessions = []) => {
+  const finalizedEvents = sessions.map((s, i) => ({
+    id: `finalized-${s.id || i}`,
+    time: relativeTime(s.dateCreated),
+    timestamp: s.dateCreated,
+    title: 'Question paper finalized',
+    detail: `${s.examName}${s.subject ? ` · ${s.subject}` : ''} — ${s.questionCount} questions, ${s.totalMarks} marks.`,
+    type: 'session',
+  }));
+
+  const evaluationEvents = sessions
+    .filter((s) => s.studentsEvaluated > 0)
     .map((s, i) => ({
-      id: s.id || i,
-      time: relativeTime(s.dateCreated),
-      title: 'Question paper finalized',
-      detail: `${s.examName}${s.subject ? ` · ${s.subject}` : ''} — ${s.questionCount} questions, ${s.totalMarks} marks.`,
-      type: 'session',
+      id: `evaluated-${s.id || i}`,
+      time: relativeTime(s.evaluationDate),
+      timestamp: s.evaluationDate,
+      title: 'Answer sheets evaluated',
+      detail: `${s.examName}${s.subject ? ` · ${s.subject}` : ''} — ${s.studentsEvaluated} sheet${s.studentsEvaluated === 1 ? '' : 's'} scored, ${s.avgScore}% average.`,
+      type: 'evaluation',
     }));
+
+  return [...finalizedEvents, ...evaluationEvents]
+    .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))
+    .slice(0, 8);
+};
 
 export const deriveTopicsFromQuestions = (questions = []) => {
   const map = new Map();
