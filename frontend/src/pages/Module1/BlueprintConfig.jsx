@@ -13,6 +13,7 @@ import Button        from '../../components/common/Button';
 import StatusBadge   from '../../components/common/StatusBadge';
 import ProgressBar   from '../../components/common/ProgressBar';
 import { useAppStore } from '../../store/useAppStore';
+import { sessionApi } from '../../services/api';
 import { StepGuard } from '../../hooks/useWorkflow';
 import { countByType } from '../../utils/questionTypes';
 import { PAGE_BG } from '../../utils/theme';
@@ -57,6 +58,7 @@ export default function BlueprintConfig() {
   const finalizeExamSession = useAppStore((s) => s.finalizeExamSession);
   const finalizeLoading     = useAppStore((s) => s.finalizeLoading);
   const finalizeError       = useAppStore((s) => s.finalizeError);
+  const exportSessionId     = useAppStore((s) => s.finalizedSessionId || s.selectedSessionId);
 
   const approvedCount = questions.filter((q) => q.approved).length;
 
@@ -68,6 +70,16 @@ export default function BlueprintConfig() {
     if (approvedCount === 0) return;
     const session = await finalizeExamSession(projectId);
     if (session?.id) navigate(`/session/${session.id}`);
+  };
+
+  const handleExportQuestionPaper = () => {
+    if (!exportSessionId) return;
+    window.location.href = sessionApi.exportQuestionPaperUrl(exportSessionId);
+  };
+
+  const handleExportAnswerKey = () => {
+    if (!exportSessionId) return;
+    window.location.href = sessionApi.exportAnswerKeyUrl(exportSessionId);
   };
 
   const totalMarks = examInfo.totalMarks || topics.reduce((sum, t) => sum + (t.marks || 0), 0);
@@ -221,8 +233,18 @@ export default function BlueprintConfig() {
                 </p>
               )}
               <div className="mt-5 grid gap-4 sm:grid-cols-3">
-                <ExportButton icon={FileText}    title="Question Paper PDF"    subtitle="Coming soon" />
-                <ExportButton icon={FileCode}    title="Answer Key PDF"        subtitle="Coming soon" />
+                <ExportButton
+                  icon={FileText}
+                  title="Question Paper PDF"
+                  subtitle={exportSessionId ? 'Download PDF' : 'Create session first'}
+                  onClick={exportSessionId ? handleExportQuestionPaper : undefined}
+                />
+                <ExportButton
+                  icon={FileCode}
+                  title="Answer Key PDF"
+                  subtitle={exportSessionId ? 'Download PDF' : 'Create session first'}
+                  onClick={exportSessionId ? handleExportAnswerKey : undefined}
+                />
                 <ExportButton
                   icon={BookMarked}
                   title={finalizeLoading ? 'Saving…' : 'Create Exam Session'}

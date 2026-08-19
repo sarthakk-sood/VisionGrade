@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { uploadApi, topicApi, questionApi, sessionApi } from '../services/api';
+import { uploadApi, topicApi, questionApi, sessionApi, ocrApi, evaluationApi } from '../services/api';
 import { displaySessionStatus } from '../utils/sessionHelpers';
 
 const defaultBlueprint = {
@@ -64,6 +64,7 @@ const mapApiQuestion = (q, idx) => ({
   explanation: q.explanation || '',
   modelAnswer: q.modelAnswer || '',
   markingScheme: q.markingScheme || '',
+  markingCriteria: Array.isArray(q.markingCriteria) ? q.markingCriteria : [],
   // Provenance — the PDF passage this question was written from.
   sourceEvidence: q.sourceEvidence || '',
   sourceFile:     q.sourceFile || '',
@@ -88,7 +89,7 @@ const mapApiSession = (s, questions = null) => {
     avgScore: 0,
     answerProvider: s.answerProvider || null,
     sessionQuestions:  qs,
-    hasModelAnswers:   Boolean(qs?.length),
+    hasModelAnswers: Boolean(qs?.length) || Boolean(s.hasAnswerKey) || Boolean(s.answerProvider),
   };
 };
 
@@ -218,7 +219,11 @@ export const useAppStore = create((set, get) => ({
   },
   setSession: (session) => set({ session }),
 
-  selectSession: (id) => set({ selectedSessionId: id }),
+  selectSession: (id) => {
+    if (id) localStorage.setItem('vg_session_id', id);
+    else localStorage.removeItem('vg_session_id');
+    set({ selectedSessionId: id });
+  },
 
   createExamSession: (newSession) =>
     set((s) => ({
@@ -833,6 +838,55 @@ export const useAppStore = create((set, get) => ({
     } catch {
       set({ sessionsLoading: false });
       return [];
+    }
+  },
+
+  answerSheets: [],
+  evaluationReports: [],
+  evaluationSummary: null,
+  currentAnswerSheetId: localStorage.getItem('vg_sheet_id') || null,
+  evaluationError: null,
+
+  setCurrentAnswerSheet: (id) => {
+    if (id) localStorage.setItem('vg_sheet_id', id);
+    else localStorage.removeItem('vg_sheet_id');
+    set({ currentAnswerSheetId: id });
+  },
+
+  loadAnswerSheets: async (sessionId) => {
+    if (!sessionId) {
+      set({ answerSheets: [] });
+      return [];
+    }
+    try {
+      const data = await ocrApi.listBySession(sessionId);
+      const sheets = data.sheets || [];
+      set({ answerSheets: sheets });
+      return sheets;
+    } catch {
+      set({ answerSheets: [] });
+      return [];
+    }
+  },
+
+  loadEvaluationReports: async (sessionId) => {
+    if (!sessionId) {
+      set({ evaluationReports: [], evaluationSummary: null });
+      return null;
+    }
+    try {
+      const data = await evaluationApi.list(sessionId);
+      set({
+        evaluationReports: data.reports || [],
+        evaluationSummary: data.summary || null,
+        evaluationError: null,
+      });
+      return data;
+    } catch (err) {
+      set({
+        evaluationError: err?.response?.data?.error || err.message || 'Failed to load evaluations',
+      });
+      return null;
     }
   },
 }));

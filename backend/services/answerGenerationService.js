@@ -15,6 +15,10 @@ const {
   sleep,
 } = require('../utils/llmUtils');
 const {
+  normalizeCriteria,
+  criteriaToSchemeString,
+} = require('../utils/markingCriteria');
+const {
   buildCorpus,
   retrieve,
   formatEvidenceBlock,
@@ -73,7 +77,8 @@ Each question comes with VERBATIM EXCERPTS from those documents. The excerpts ar
 - LongAnswer: numbered sub-parts matching the question; include derivations/steps where the question asks for them.
 
 For every question return:
-- markingScheme: bullet breakdown totalling exactly the question's marks (part marks for each key step/point).
+- markingCriteria: array of { point, marks }. Points must sum to exactly the question's marks.
+- markingScheme: the same breakdown as a short bullet string (for the printed answer key).
 - explanation: 1-2 sentences for the teacher citing the source content.
 
 Return ONLY valid JSON:
@@ -83,7 +88,10 @@ Return ONLY valid JSON:
       "questionNumber": <integer matching input>,
       "correctAnswer": "<string>",
       "modelAnswer": "<string>",
-      "markingScheme": "<string>",
+      "markingCriteria": [
+        { "point": "<what the student must write>", "marks": 1 }
+      ],
+      "markingScheme": "<string, e.g. '1 mark: definition\\n2 marks: example'>",
       "explanation": "<string>"
     }
   ]
@@ -164,11 +172,17 @@ const parseAnswerResponse = (raw, batchQuestions, startIndex) => {
     const localNum  = i + 1;
     // Prefer an exact global-number match; fall back to local position
     const llm = byGlobalNum.get(globalNum) || byLocalNum.get(localNum) || {};
+    const maxMarks = Number(batchQuestions[i].marks) || 0;
+    const markingCriteria = normalizeCriteria(
+      llm.markingCriteria?.length ? llm.markingCriteria : llm.markingScheme,
+      maxMarks
+    );
     merged.push({
       questionNumber: globalNum,
       correctAnswer:  llm.correctAnswer  || '',
       modelAnswer:    llm.modelAnswer    || '',
-      markingScheme:  llm.markingScheme  || '',
+      markingCriteria,
+      markingScheme:  llm.markingScheme || criteriaToSchemeString(markingCriteria) || '',
       explanation:    llm.explanation    || '',
     });
   }

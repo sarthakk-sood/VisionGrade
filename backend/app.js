@@ -13,8 +13,8 @@ const healthRoutes = require('./routes/health');
 const questionRoutes = require('./routes/questions');
 const topicRoutes = require('./routes/topics');
 const sessionRoutes = require('./routes/sessions');
-const ocrRoutes      = require('./routes/ocr');
-// const evaluationRoutes = require('./routes/evaluation'); // uncomment when ready
+const ocrRoutes        = require('./routes/ocr');
+const evaluationRoutes = require('./routes/evaluation');
 
 const app = express();
 
@@ -32,7 +32,7 @@ app.use(cors({
 // Global limiter — all API routes
 app.use('/api', rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 300,
   message: { success: false, error: 'Too many requests, please try again later.' },
 }));
 
@@ -63,8 +63,8 @@ app.use('/api/questions', questionRoutes);
 app.use('/api/topics', topicRoutes);
 app.use('/api/sessions', sessionRoutes);
 app.use('/api/auth', authRoutes);
-app.use('/api/ocr',  ocrRoutes);
-// app.use('/api/evaluation', evaluationRoutes);
+app.use('/api/ocr', ocrRoutes);
+app.use('/api/evaluation', evaluationRoutes);
 
 // ── Error handling ────────────────────────────────────────────────────────────
 app.use(notFound);

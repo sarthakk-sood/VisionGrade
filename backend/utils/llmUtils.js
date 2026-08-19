@@ -99,6 +99,7 @@ const isLlmParseError = (err) => {
     msg.includes('not valid json') ||
     msg.includes('missing "questions"') ||
     msg.includes('missing "answers"') ||
+    msg.includes('missing "evaluations"') ||
     msg.includes('missing "topics"') ||
     msg.includes('returned an empty response')
   );

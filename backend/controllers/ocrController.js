@@ -1,29 +1,44 @@
 /**
- * ocrController.js — Module 2: Answer Sheet Text Extraction
- *
- * POST /api/ocr/extract
- *   Accepts a PDF upload + rollNumber, forwards to Python/TrOCR microservice,
- *   persists an AnswerSheet document in MongoDB, and returns the result.
- *
- * GET /api/ocr/:sheetId
- *   Fetches a previously extracted AnswerSheet from MongoDB.
+ * ocrController.js — Module 2: upload and store a student answer sheet.
+ * Scoring reads the photo with Gemini; TrOCR is not used.
  */
 
 const fs          = require('fs');
 const mongoose    = require('mongoose');
 const AnswerSheet = require('../models/answer-sheet');
-const { extractTextFromPDF, checkOcrServiceHealth } = require('../services/ocrService');
+const ExamSession = require('../models/ExamSession');
+const { uploadAnswerSheetFile } = require('../services/documentService');
 
-// ── POST /api/ocr/extract ──────────────────────────────────────────────────────
+const assertOwnedSession = async (sessionId, teacherId) => {
+  if (!sessionId) return null;
+  if (!mongoose.Types.ObjectId.isValid(sessionId)) {
+    const err = new Error('Invalid session ID');
+    err.statusCode = 400;
+    throw err;
+  }
+  const session = await ExamSession.findById(sessionId).select('teacherId examTitle questionCount');
+  if (!session) {
+    const err = new Error('Exam session not found');
+    err.statusCode = 404;
+    throw err;
+  }
+  if (session.teacherId.toString() !== teacherId.toString()) {
+    const err = new Error('Not authorised for this exam session');
+    err.statusCode = 403;
+    throw err;
+  }
+  return session;
+};
+
 const extractAnswerSheet = async (req, res, next) => {
-  const file = req.file; // Multer diskStorage
+  const file = req.file;
 
   if (!file) {
     res.status(400);
-    return next(new Error('No PDF uploaded. Send the file under the field name "pdf".'));
+    return next(new Error('No file uploaded. Send the file under the field name "pdf".'));
   }
 
-  const { rollNumber, studentName, sessionId, evaluationId } = req.body;
+  const { rollNumber, studentName, sessionId } = req.body;
 
   if (!rollNumber?.trim()) {
     _cleanFile(file.path);
@@ -31,96 +46,112 @@ const extractAnswerSheet = async (req, res, next) => {
     return next(new Error('"rollNumber" is required in the request body.'));
   }
 
-  let ocrResult;
-
-  try {
-    console.log(
-      `[ocrController] Starting TrOCR for roll=${rollNumber}, file=${file.originalname}`
-    );
-    ocrResult = await extractTextFromPDF(file.path);
-    console.log(
-      `[ocrController] Done — ${ocrResult.totalPages} page(s), ` +
-      `avg confidence ${ocrResult.avgConfidence}%`
-    );
-  } catch (err) {
-    console.error('[ocrController] OCR failed:', err.message);
-    return next(err); // errorHandler → 500 or 502
-  } finally {
-    // Delete the uploaded PDF regardless of success/failure
+  if (!sessionId) {
     _cleanFile(file.path);
+    res.status(400);
+    return next(new Error('"sessionId" is required. Select a finalized exam session first.'));
   }
 
-  // ── Persist to MongoDB ────────────────────────────────────────────────────
-  // evaluationId links this sheet to an EvaluationReport (Module 3).
-  // If not provided yet (typical at this stage), use a placeholder ObjectId
-  // that Module 3 will overwrite when it creates the evaluation document.
+  let storedFile = null;
+
+  try {
+    await assertOwnedSession(sessionId, req.teacher._id);
+
+    storedFile = await uploadAnswerSheetFile(file.path, {
+      originalName: file.originalname,
+      rollNumber: rollNumber.trim(),
+      sessionId: sessionId || 'unassigned',
+    });
+  } catch (err) {
+    _cleanFile(file.path);
+    if (err.statusCode) {
+      return res.status(err.statusCode).json({ success: false, error: err.message });
+    }
+    console.error('[ocrController] Upload failed:', err.message);
+    return next(err);
+  }
+
+  _cleanFile(file.path);
+
   let sheetDoc = null;
   try {
-    const ocrRawText = ocrResult.pages
-      .map((p) => `--- Page ${p.pageNumber} ---\n${p.text}`)
-      .join('\n\n');
-
-    // Build lowConfidenceLines from any line with confidence < 70 across all pages
-    const lowConfidenceLines = [];
-    for (const page of ocrResult.pages) {
-      for (const line of page.lines ?? []) {
-        if (line.confidence < 70) {
-          lowConfidenceLines.push({
-            page:       page.pageNumber,
-            lineNumber: line.lineNumber,
-            text:       line.text.slice(0, 500),
-            confidence: line.confidence,
-          });
-        }
-      }
-    }
-
-    sheetDoc = await AnswerSheet.create({
-      evaluationId: evaluationId
-        ? new mongoose.Types.ObjectId(evaluationId)
-        : new mongoose.Types.ObjectId(),   // placeholder — Module 3 links this
-
-      rollNumber:          rollNumber.trim(),
-      studentName:         studentName?.trim() || '',
-      sessionId:           sessionId || null,
-
-      // Per-page structured data
-      pages:               ocrResult.pages,
-      ocrRawText,
-      ocrConfidence:       ocrResult.avgConfidence,
-
-      // Line-level flags (stretch feature)
-      lowConfidenceLines,
-      isFlaggedForReview:  ocrResult.isLowConfidence,
-      status:              'ocr_done',
-    });
+    sheetDoc = await AnswerSheet.findOneAndUpdate(
+      { teacherId: req.teacher._id, sessionId, rollNumber: rollNumber.trim() },
+      {
+        teacherId: req.teacher._id,
+        sessionId: sessionId || null,
+        rollNumber: rollNumber.trim(),
+        studentName: studentName?.trim() || '',
+        originalFilename: file.originalname,
+        mimeType: file.mimetype,
+        fileSize: file.size,
+        fileUrl: storedFile.url,
+        filePublicId: storedFile.publicId,
+        fileResourceType: storedFile.resourceType,
+        status: 'uploaded',
+        evaluationId: null,
+        pages: [],
+        pageCount: 0,
+        ocrRawText: '',
+        ocrConfidence: 0,
+        lowConfidenceLines: [],
+        isFlaggedForReview: false,
+        ocrError: '',
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
   } catch (dbErr) {
-    // DB failure is non-fatal — the OCR result is still returned to the caller
     console.error('[ocrController] MongoDB persist failed:', dbErr.message);
   }
 
   return res.status(200).json({
     success: true,
-    message: 'TrOCR extraction complete.',
+    message: 'Answer sheet stored. Scoring will read the photo against the marking scheme.',
     data: {
-      answerSheetId:       sheetDoc?._id ?? null,
-      rollNumber:          rollNumber.trim(),
-      studentName:         studentName?.trim() || null,
-      sessionId:           sessionId || null,
-
-      // Extraction summary
-      totalPages:          ocrResult.totalPages,
-      avgConfidence:       ocrResult.avgConfidence,
-      lowConfidencePages:  ocrResult.lowConfidencePages,
-      isLowConfidence:     ocrResult.isLowConfidence,
-
-      // Full structured results
-      pages: ocrResult.pages,   // [{ pageNumber, text, confidence, lines: [...] }]
+      answerSheetId: sheetDoc?._id ?? null,
+      rollNumber: rollNumber.trim(),
+      studentName: studentName?.trim() || null,
+      sessionId: sessionId || null,
+      fileUrl: storedFile.url,
     },
   });
 };
 
-// ── GET /api/ocr/:sheetId ──────────────────────────────────────────────────────
+const listAnswerSheets = async (req, res, next) => {
+  try {
+    const session = await assertOwnedSession(req.params.sessionId, req.teacher._id);
+    const sheets = await AnswerSheet.find({
+      teacherId: req.teacher._id,
+      sessionId: session._id,
+    })
+      .sort({ createdAt: 1 })
+      .select('-pages');
+
+    return res.json({
+      success: true,
+      sheets: sheets.map((s) => ({
+        id: s._id,
+        rollNumber: s.rollNumber,
+        studentName: s.studentName,
+        status: s.status,
+        pageCount: s.pageCount,
+        ocrConfidence: s.ocrConfidence,
+        isFlaggedForReview: s.isFlaggedForReview,
+        lowConfidenceCount: s.lowConfidenceLines?.length || 0,
+        fileUrl: s.fileUrl,
+        mimeType: s.mimeType,
+        originalFilename: s.originalFilename,
+        evaluationId: s.evaluationId,
+        ocrError: s.ocrError,
+        createdAt: s.createdAt,
+      })),
+    });
+  } catch (err) {
+    if (err.statusCode) return res.status(err.statusCode).json({ success: false, error: err.message });
+    next(err);
+  }
+};
+
 const getAnswerSheet = async (req, res, next) => {
   try {
     const sheet = await AnswerSheet.findById(req.params.sheetId).lean();
@@ -128,23 +159,57 @@ const getAnswerSheet = async (req, res, next) => {
       res.status(404);
       return next(new Error('Answer sheet not found.'));
     }
+    if (sheet.teacherId && sheet.teacherId.toString() !== req.teacher._id.toString()) {
+      return res.status(403).json({ success: false, error: 'Not authorised' });
+    }
     return res.json({ success: true, data: sheet });
   } catch (err) {
     return next(err);
   }
 };
 
-// ── GET /api/ocr/service-health ────────────────────────────────────────────────
-// Convenience endpoint so the frontend/ops can check whether the Python service
-// is reachable without triggering a real upload.
-const ocrServiceHealth = async (_req, res) => {
-  const { ok, detail } = await checkOcrServiceHealth();
-  return res.status(ok ? 200 : 503).json({ success: ok, detail });
+const updateOcrText = async (req, res, next) => {
+  try {
+    const sheet = await AnswerSheet.findById(req.params.sheetId);
+    if (!sheet) {
+      return res.status(404).json({ success: false, error: 'Answer sheet not found' });
+    }
+    if (sheet.teacherId.toString() !== req.teacher._id.toString()) {
+      return res.status(403).json({ success: false, error: 'Not authorised' });
+    }
+
+    const { ocrRawText, pages } = req.body || {};
+    if (typeof ocrRawText === 'string') {
+      sheet.ocrRawText = ocrRawText;
+    }
+    if (Array.isArray(pages)) {
+      sheet.pages = pages;
+      sheet.pageCount = pages.length;
+    }
+    sheet.isFlaggedForReview = false;
+    await sheet.save();
+
+    return res.json({ success: true, data: sheet });
+  } catch (err) {
+    next(err);
+  }
 };
 
-// ── Helpers ────────────────────────────────────────────────────────────────────
+const ocrServiceHealth = async (_req, res) => {
+  return res.json({
+    success: true,
+    detail: 'TrOCR is not used. Sheets are scored from the uploaded photo.',
+  });
+};
+
 function _cleanFile(filePath) {
   try { if (filePath) fs.unlinkSync(filePath); } catch { /* ignore */ }
 }
 
-module.exports = { extractAnswerSheet, getAnswerSheet, ocrServiceHealth };
+module.exports = {
+  extractAnswerSheet,
+  listAnswerSheets,
+  getAnswerSheet,
+  updateOcrText,
+  ocrServiceHealth,
+};

@@ -184,7 +184,12 @@ const buildQuestion = (q, num, includeAnswers) => {
       block += `\\noindent{\\textcolor{vgblue}{\\textbf{Model Answer:}}}\n\\par\n`;
       block += `\\noindent ${tex(q.modelAnswer)}\n\\par\n`;
     }
-    if (q.markingScheme) {
+    if (Array.isArray(q.markingCriteria) && q.markingCriteria.length) {
+      block += `\\noindent{\\textcolor{vgblue}{\\textbf{Marking Scheme:}}}\n\\par\n`;
+      q.markingCriteria.forEach((c) => {
+        block += `\\noindent $\\bullet$~${tex(`${c.marks} mark${Number(c.marks) === 1 ? '' : 's'}: ${c.point}`)}\n\\par\n`;
+      });
+    } else if (q.markingScheme) {
       block += `\\noindent{\\textcolor{vgblue}{\\textbf{Marking Scheme:}}}\n\\par\n`;
       block += `\\noindent ${tex(q.markingScheme)}\n\\par\n`;
     }

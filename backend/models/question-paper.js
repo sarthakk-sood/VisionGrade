@@ -18,6 +18,10 @@ const questionSchema = new mongoose.Schema({
   options: [{ type: String }],          // MCQ only
   modelAnswer: { type: String },
   markingScheme: { type: String },
+  markingCriteria: [{
+    point: { type: String },
+    marks: { type: Number },
+  }],
   isEdited: { type: Boolean, default: false },
 });
 

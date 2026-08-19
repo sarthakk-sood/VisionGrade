@@ -1,6 +1,8 @@
 # VisionGrade OCR Microservice
 
-Python FastAPI service that provides TrOCR-based handwriting recognition for Module 2.
+**Not used by the current Module 2 scoring path.** Sheets are stored on Cloudinary and marked from the photo with Gemini. You do not need to run this service.
+
+Python FastAPI service that provides TrOCR-based handwriting recognition for experiments.
 
 ## What it does
 
@@ -37,14 +39,14 @@ pip install -r requirements.txt
 
 # 4. Start the service
 python main.py
-# Service runs on http://localhost:5001 by default
+# Service runs on http://localhost:8001 by default (Node API uses 5001)
 ```
 
 ## Environment variables
 
 | Variable | Default | Description |
 |---|---|---|
-| `OCR_PORT` | `5001` | Port the service listens on |
+| `OCR_PORT` | `8001` | Port the service listens on |
 | `MAX_PDF_MB` | `50` | Max accepted PDF size |
 
 ## API
@@ -52,28 +54,37 @@ python main.py
 ### `GET /health`
 Returns `{ "status": "ok", "model": "...", "device": "cpu|cuda" }`
 
-### `POST /extract`
+### `POST /extract` (async job)
 - **Content-Type:** `multipart/form-data`
-- **Field:** `pdf` (File, application/pdf)
-- **Response:**
+- **Field:** `pdf` (PDF or image)
+- **Immediate response:** `{ "jobId": "...", "status": "queued" }`
+
+### `GET /jobs/{jobId}`
+Poll until `status` is `done` or `error`. On success:
 ```json
 {
-  "pages": [
-    {
-      "pageNumber": 1,
-      "text": "full page text, newline-separated lines",
-      "confidence": 84.2,
-      "lines": [
-        { "lineNumber": 1, "text": "...", "confidence": 91.5, "bbox": [x1, y1, x2, y2] }
-      ]
-    }
-  ],
-  "totalPages": 3,
-  "avgConfidence": 82.7,
-  "lowConfidencePages": [2],
-  "isLowConfidence": false
+  "jobId": "...",
+  "status": "done",
+  "result": {
+    "pages": [
+      {
+        "pageNumber": 1,
+        "text": "full page text, newline-separated lines",
+        "confidence": 84.2,
+        "lines": [
+          { "lineNumber": 1, "text": "...", "confidence": 84.0, "bbox": [x1, y1, x2, y2] }
+        ]
+      }
+    ],
+    "totalPages": 3,
+    "avgConfidence": 82.7,
+    "lowConfidencePages": [2],
+    "isLowConfidence": false
+  }
 }
 ```
+
+Synchronous `POST /extract/sync` is kept for local testing only.
 
 ## Performance notes
 
@@ -87,4 +98,4 @@ Returns `{ "status": "ok", "model": "...", "device": "cpu|cuda" }`
 ## Integration with Node.js backend
 
 The Express backend's `ocrService.js` calls this service via HTTP.
-Set `OCR_SERVICE_URL=http://localhost:5001` in `backend/.env`.
+Set `OCR_SERVICE_URL=http://localhost:8001` in `backend/.env`.

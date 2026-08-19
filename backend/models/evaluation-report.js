@@ -7,31 +7,43 @@ const questionEvalSchema = new mongoose.Schema({
   studentAnswer:  { type: String },
   maxMarks:       { type: Number, required: true },
   marksAwarded:   { type: Number, required: true },
-  isOverridden:   { type: Boolean, default: false }, // teacher manually changed marks
+  isOverridden:   { type: Boolean, default: false },
   overriddenMarks:{ type: Number },
-  keywordCoverage:{ type: Number },  // % of keywords matched
-  semanticScore:  { type: Number },  // 0–1 similarity score
+  matchedKeywords: [{ type: String }],
+  keywordCoverage:{ type: Number },
+  semanticScore:  { type: Number },
   strengths:      [{ type: String }],
   weaknesses:     [{ type: String }],
   feedback:       { type: String },
-});
+}, { _id: false });
 
 const evaluationReportSchema = new mongoose.Schema({
+  teacherId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Teacher',
+    required: true,
+  },
   projectId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Project',
   },
-  questionPaperId: {
+  sessionId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'QuestionPaper',
+    ref: 'ExamSession',
+    required: true,
   },
-  studentName:  { type: String, trim: true },
-  rollNumber:   { type: String, trim: true },
-  totalMarks:   { type: Number },
-  marksObtained:{ type: Number },
-  percentage:   { type: Number },
-  questionEvals:[questionEvalSchema],
-  exportPath:   { type: String },  // path to individual DOCX report
+  answerSheetId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'AnswerSheet',
+    required: true,
+  },
+  studentName:   { type: String, trim: true },
+  rollNumber:    { type: String, trim: true },
+  totalMarks:    { type: Number },
+  marksObtained: { type: Number },
+  percentage:    { type: Number },
+  provider:      { type: String },
+  questionEvals: [questionEvalSchema],
   status: {
     type: String,
     enum: ['pending', 'evaluated', 'approved'],
@@ -39,7 +51,9 @@ const evaluationReportSchema = new mongoose.Schema({
   },
 }, { timestamps: true });
 
-// Auto-calculate percentage before save
+evaluationReportSchema.index({ sessionId: 1, rollNumber: 1 });
+evaluationReportSchema.index({ answerSheetId: 1 }, { unique: true });
+
 evaluationReportSchema.pre('save', function (next) {
   if (this.totalMarks && this.marksObtained !== undefined) {
     this.percentage = parseFloat(

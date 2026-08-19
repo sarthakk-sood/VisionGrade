@@ -25,6 +25,7 @@ const formatQuestion = (q) => ({
   explanation:   q.explanation || '',
   modelAnswer:   q.modelAnswer || '',
   markingScheme: q.markingScheme || '',
+  markingCriteria: q.markingCriteria || [],
   approved:      q.approved ?? false,
   sourceEvidence: q.sourceEvidence || '',
   sourceFile:     q.sourceFile || '',

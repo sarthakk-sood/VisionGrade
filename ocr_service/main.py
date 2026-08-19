@@ -34,7 +34,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks
+from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.responses import JSONResponse
 import uvicorn
 
@@ -103,7 +103,7 @@ app = FastAPI(
 
 # ── Background worker ──────────────────────────────────────────────────────────
 
-def _run_ocr_job(job_id: str, pdf_path: str, tmp_dir: str) -> None:
+def _run_ocr_job(job_id: str, pdf_path: str, tmp_dir: str, question_count: int = 0) -> None:
     """
     Runs in a background thread. Updates the job store when done.
     Cleans up the temp directory regardless of success/failure.
@@ -113,7 +113,7 @@ def _run_ocr_job(job_id: str, pdf_path: str, tmp_dir: str) -> None:
 
     logger.info("[job %s] Starting TrOCR extraction…", job_id)
     try:
-        result = extract_text_from_pdf(pdf_path)
+        result = extract_text_from_pdf(pdf_path, question_count=question_count)
         with _jobs_lock:
             _jobs[job_id]["status"] = "done"
             _jobs[job_id]["result"] = result
@@ -136,16 +136,24 @@ def _run_ocr_job(job_id: str, pdf_path: str, tmp_dir: str) -> None:
 def health():
     """Liveness probe — Node.js backend can poll this before sending PDFs."""
     import torch
+    device = "cpu"
+    if torch.cuda.is_available():
+        device = "cuda"
+    elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+        device = "mps"
     return {
         "status": "ok",
         "model":  MODEL_ID,
-        "device": "cuda" if torch.cuda.is_available() else "cpu",
+        "device": device,
         "jobs":   len(_jobs),
     }
 
 
 @app.post("/extract")
-async def extract(file: UploadFile = File(..., alias="pdf")):
+async def extract(
+    file: UploadFile = File(..., alias="pdf"),
+    questionCount: Optional[int] = Form(None),
+):
     """
     Accept a PDF or image answer sheet, enqueue a background OCR job, and
     return a jobId immediately. The caller must poll GET /jobs/{jobId}.
@@ -207,7 +215,7 @@ async def extract(file: UploadFile = File(..., alias="pdf")):
     # -- Start background thread -----------------------------------------------
     thread = threading.Thread(
         target=_run_ocr_job,
-        args=(job_id, file_path, tmp_dir),
+        args=(job_id, file_path, tmp_dir, int(questionCount or 0)),
         daemon=True,
         name=f"ocr-{job_id[:8]}",
     )
@@ -246,15 +254,17 @@ def get_job(job_id: str):
         #     del _jobs[job_id]
         return JSONResponse(content={"jobId": job_id, "status": "done", "result": result})
 
-    # status == "error"
+    # Always 200 so the Node poller can read status:"error" instead of retrying 422s.
     return JSONResponse(
         content={"jobId": job_id, "status": "error", "error": job["error"]},
-        status_code=422,
     )
 
 
 @app.post("/extract/sync")
-async def extract_sync(file: UploadFile = File(..., alias="pdf")):
+async def extract_sync(
+    file: UploadFile = File(..., alias="pdf"),
+    questionCount: Optional[int] = Form(None),
+):
     """
     DEPRECATED synchronous endpoint kept for local curl/Postman testing.
     DO NOT call this from Node.js — it will block until TrOCR finishes
@@ -283,7 +293,7 @@ async def extract_sync(file: UploadFile = File(..., alias="pdf")):
     try:
         with open(file_path, "wb") as f:
             f.write(content)
-        result = extract_text_from_pdf(file_path)
+        result = extract_text_from_pdf(file_path, question_count=int(questionCount or 0))
         return JSONResponse(content=result)
     except RuntimeError as exc:
         raise HTTPException(status_code=422, detail=str(exc))
@@ -296,7 +306,8 @@ async def extract_sync(file: UploadFile = File(..., alias="pdf")):
 
 # ── Entry point ────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    port = int(os.getenv("OCR_PORT", "5001"))
+    # 8001 so it does not collide with the Node API (PORT=5001 on macOS).
+    port = int(os.getenv("OCR_PORT", "8001"))
     uvicorn.run(
         "main:app",
         host="0.0.0.0",

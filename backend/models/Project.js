@@ -26,6 +26,10 @@ const generatedQuestionSchema = new mongoose.Schema({
   explanation:  { type: String },
   modelAnswer:  { type: String },
   markingScheme:{ type: String },
+  markingCriteria: [{
+    point: { type: String },
+    marks: { type: Number },
+  }],
   approved:     { type: Boolean, default: false },
 
   // Provenance — the passage in the uploaded PDF this question was written from.

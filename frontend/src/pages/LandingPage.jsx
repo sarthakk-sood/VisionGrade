@@ -7,7 +7,7 @@ import Button from '../components/common/Button';
 
 const features = [
   { icon: BrainCircuit, title: 'AI Question Generation', description: 'Generate aligned question papers from source PDFs, syllabus weights, and cognitive levels.' },
-  { icon: ScanFace, title: 'OCR Handwriting Recognition', description: 'Extract handwritten text with confidence scoring and low-confidence review tools.' },
+  { icon: ScanFace, title: 'Photo-based scoring', description: 'Score handwritten sheets from the uploaded photo against the Module 1 marking scheme.' },
   { icon: LineChart, title: 'Automated Evaluation', description: 'Score answer sheets with transparent feedback, strengths, and weaknesses per student.' },
   { icon: FileText, title: 'Question Paper Export', description: 'Export polished question sets and answer keys as DOCX or PDF for faculty workflow.' },
   { icon: Users, title: 'Analytics Dashboard', description: 'Track sessions, review accuracy, and monitor batch progress from one view.' },
@@ -15,7 +15,7 @@ const features = [
 ];
 
 const module1Steps = ['Exam Details', 'Upload PDFs', 'Topics & Weightage', 'Generate Questions', 'Review Questions', 'Export Paper'];
-const module2Steps = ['Select Exam', 'Upload Sheets', 'OCR Processing', 'Review Flags', 'Evaluation Results'];
+const module2Steps = ['Select Exam', 'Upload Sheets', 'Review', 'Evaluation Results'];
 
 const plans = [
   { name: 'Academic Starter', price: 'Free', features: ['1 course workspace', 'Topic detection', 'Manual review'], highlight: false },

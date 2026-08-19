@@ -32,20 +32,26 @@
  */
 
 const fs       = require('fs');
+const path     = require('path');
 const axios    = require('axios');
 const FormData = require('form-data');
 
-const OCR_SERVICE_URL = process.env.OCR_SERVICE_URL || 'http://localhost:5001';
+const OCR_SERVICE_URL = process.env.OCR_SERVICE_URL || 'http://localhost:8001';
 
-// How often Node polls the Python job endpoint (milliseconds)
-const POLL_INTERVAL_MS = parseInt(process.env.OCR_POLL_INTERVAL_MS, 10) || 5_000;   // 5 s
+const POLL_INTERVAL_MS = parseInt(process.env.OCR_POLL_INTERVAL_MS, 10) || 1_000;
+const MAX_WAIT_MS      = parseInt(process.env.OCR_MAX_WAIT_MS,      10) || 30 * 60 * 1000;
+const REQUEST_TIMEOUT  = parseInt(process.env.OCR_REQUEST_TIMEOUT_MS, 10) || 15_000;
 
-// Maximum wall-clock time to wait for OCR to finish (milliseconds)
-// TrOCR on CPU: ~5–30 s/page. Allow 30 min for a large PDF.
-const MAX_WAIT_MS      = parseInt(process.env.OCR_MAX_WAIT_MS,      10) || 30 * 60 * 1000; // 30 min
-
-// Timeout for each individual HTTP request to the OCR service
-const REQUEST_TIMEOUT  = parseInt(process.env.OCR_REQUEST_TIMEOUT_MS, 10) || 15_000;  // 15 s
+const MIME_BY_EXT = {
+  '.pdf':  'application/pdf',
+  '.jpg':  'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png':  'image/png',
+  '.tif':  'image/tiff',
+  '.tiff': 'image/tiff',
+  '.bmp':  'image/bmp',
+  '.webp': 'image/webp',
+};
 
 // ── Helpers ─────────────────────────────────────────────────────────────────────
 
@@ -57,16 +63,23 @@ function sleep(ms) {
  * POST the PDF to the Python microservice and get back a jobId.
  * Returns the jobId string.
  */
-async function _submitJob(pdfFilePath) {
+async function _submitJob(pdfFilePath, fileMeta = {}) {
   if (!fs.existsSync(pdfFilePath)) {
     throw new Error(`[ocrService] PDF not found at path: ${pdfFilePath}`);
   }
 
+  const filename = fileMeta.originalName || path.basename(pdfFilePath);
+  const ext = path.extname(filename || pdfFilePath).toLowerCase();
+  const contentType = fileMeta.mimeType || MIME_BY_EXT[ext] || 'application/octet-stream';
+
   const form = new FormData();
   form.append('pdf', fs.createReadStream(pdfFilePath), {
-    filename:    'answer_sheet.pdf',
-    contentType: 'application/pdf',
+    filename,
+    contentType,
   });
+  if (fileMeta.questionCount) {
+    form.append('questionCount', String(fileMeta.questionCount));
+  }
 
   let response;
   try {
@@ -104,9 +117,11 @@ async function _submitJob(pdfFilePath) {
  */
 async function _pollJob(jobId) {
   const deadline = Date.now() + MAX_WAIT_MS;
+  let delay = 400;
 
   while (Date.now() < deadline) {
-    await sleep(POLL_INTERVAL_MS);
+    await sleep(delay);
+    delay = Math.min(POLL_INTERVAL_MS, delay + 200);
 
     let resp;
     try {
@@ -114,7 +129,10 @@ async function _pollJob(jobId) {
         timeout: REQUEST_TIMEOUT,
       });
     } catch (err) {
-      // Network hiccup — keep polling (don't throw yet)
+      const data = err.response?.data;
+      if (data?.status === 'error') {
+        throw new Error(`[ocrService] OCR job ${jobId} failed: ${data.error}`);
+      }
       console.warn(`[ocrService] Poll hiccup for job ${jobId}: ${err.message}`);
       continue;
     }
@@ -168,10 +186,10 @@ async function _pollJob(jobId) {
  *   isLowConfidence: boolean,
  * }>}
  */
-async function extractTextFromPDF(pdfFilePath, onProgress) {
+async function extractTextFromPDF(pdfFilePath, onProgress, fileMeta = {}) {
   console.log(`[ocrService] Submitting OCR job for: ${pdfFilePath}`);
 
-  const jobId = await _submitJob(pdfFilePath);
+  const jobId = await _submitJob(pdfFilePath, fileMeta);
   console.log(`[ocrService] Job submitted — id=${jobId}. Polling every ${POLL_INTERVAL_MS / 1000}s…`);
 
   if (onProgress) onProgress('processing');

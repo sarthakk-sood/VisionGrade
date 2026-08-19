@@ -18,7 +18,7 @@ const cards = [
     icon: ScanLine,
     title: 'Evaluate Answer Sheets',
     description:
-      'Select an existing exam session, upload student answer sheets for OCR processing, review flagged responses, and generate detailed evaluation reports.',
+      'Select an existing exam session, upload student answer sheets, review the photos against the key, and generate detailed evaluation reports.',
     to: '/module2/upload',
     gradient: 'from-purple-500/[0.08] to-blue-400/[0.05]',
     border: 'border-purple-400/15',

@@ -308,8 +308,15 @@ export default function SessionDetails() {
                               <span className="font-semibold text-slate-600">Model: </span>{q.modelAnswer}
                             </p>
                           )}
-                          {q.markingScheme && (
-                            <p className="mt-1 text-[10px] text-slate-500">{q.markingScheme}</p>
+                          {(q.markingCriteria?.length || q.markingScheme) && (
+                            <ul className="mt-1 space-y-0.5 text-[10px] text-slate-500">
+                              {(q.markingCriteria?.length
+                                ? q.markingCriteria.map((c) => `${c.marks} mark${Number(c.marks) === 1 ? '' : 's'}: ${c.point}`)
+                                : [q.markingScheme]
+                              ).map((line) => (
+                                <li key={line}>{line}</li>
+                              ))}
+                            </ul>
                           )}
                         </div>
                       ))}

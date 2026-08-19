@@ -15,6 +15,10 @@ const sessionQuestionSchema = new mongoose.Schema({
   correctAnswer:  { type: String },
   modelAnswer:    { type: String },
   markingScheme:  { type: String },
+  markingCriteria: [{
+    point: { type: String },
+    marks: { type: Number },
+  }],
   explanation:    { type: String },
 }, { _id: true });
 

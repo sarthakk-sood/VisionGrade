@@ -1,7 +1,9 @@
 import axios from 'axios';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5001/api';
+
 export const api = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api',
+  baseURL: API_BASE,
   timeout: 120000, // 2 min — topic detection can take ~60s with Gemini retry
 });
 
@@ -106,14 +108,12 @@ export const sessionApi = {
    */
   exportQuestionPaperUrl: (sessionId) => {
     const token = localStorage.getItem('vg_token') || '';
-    const base = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
-    return `${base}/sessions/${sessionId}/export/question-paper?token=${encodeURIComponent(token)}`;
+    return `${API_BASE}/sessions/${sessionId}/export/question-paper?token=${encodeURIComponent(token)}`;
   },
 
   exportAnswerKeyUrl: (sessionId) => {
     const token = localStorage.getItem('vg_token') || '';
-    const base = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api';
-    return `${base}/sessions/${sessionId}/export/answer-key?token=${encodeURIComponent(token)}`;
+    return `${API_BASE}/sessions/${sessionId}/export/answer-key?token=${encodeURIComponent(token)}`;
   },
 };
 
@@ -167,50 +167,19 @@ export const authApi = {
     api.get('/auth/me').then((r) => r.data),
 };
 
-// ── OCR / Answer Sheet API (Module 2) ─────────────────────────────────────────
-//
-// Architecture note — async job polling:
-//   TrOCR on CPU can take 5–30 min per page. The Node backend now uses an async
-//   job pattern: POST /extract submits the job to Python, then polls every 5 s
-//   until done (up to 30 min). This request must stay open that long, so the
-//   axios timeout below is set to 35 min to comfortably cover that window.
-//
+// ── Answer Sheet API (Module 2) ───────────────────────────────────────────────
 export const ocrApi = {
   /**
    * POST /api/ocr/extract
-   * Upload a PDF answer sheet and receive TrOCR extracted text per page.
-   * Node backend polls the Python job internally — this call resolves when
-   * OCR is complete (which can take up to 30 min on CPU).
+   * Upload a PDF or image answer sheet. The file is stored; scoring reads the photo.
    *
    * Required FormData fields : pdf (File), rollNumber (string)
    * Optional FormData fields : studentName (string), sessionId (string)
-   *
-   * @param {FormData} formData
-   * @param {(pct: number) => void} [onUploadProgress]
-   * @returns {Promise<{
-   *   success: boolean,
-   *   data: {
-   *     answerSheetId: string | null,
-   *     rollNumber: string,
-   *     studentName: string | null,
-   *     totalPages: number,
-   *     avgConfidence: number,
-   *     lowConfidencePages: number[],
-   *     isLowConfidence: boolean,
-   *     pages: Array<{
-   *       pageNumber: number,
-   *       text: string,
-   *       confidence: number,
-   *       lines: Array<{ lineNumber: number, text: string, confidence: number, bbox: number[] }>
-   *     }>
-   *   }
-   * }>}
    */
   extract: (formData, onUploadProgress) =>
     api.post('/ocr/extract', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      // 35 min — covers the 30-min backend polling window with margin
-      timeout: 35 * 60 * 1000,
+      timeout: 2 * 60 * 1000,
       onUploadProgress: (e) => {
         if (onUploadProgress && e.total) {
           onUploadProgress(Math.round((e.loaded * 100) / e.total));
@@ -218,15 +187,28 @@ export const ocrApi = {
       },
     }).then((r) => r.data),
 
-  /**
-   * GET /api/ocr/:sheetId
-   * Fetch a previously extracted AnswerSheet document from MongoDB.
-   */
   get: (sheetId) => api.get(`/ocr/${sheetId}`).then((r) => r.data),
 
-  /**
-   * GET /api/ocr/service-health
-   * Check whether the Python TrOCR microservice is reachable.
-   */
-  serviceHealth: () => api.get('/ocr/service-health').then((r) => r.data),
+  listBySession: (sessionId) =>
+    api.get(`/ocr/session/${sessionId}`).then((r) => r.data),
+
+  updateText: (sheetId, payload) =>
+    api.patch(`/ocr/${sheetId}/text`, payload).then((r) => r.data),
+};
+
+const EVAL_TIMEOUT = 20 * 60 * 1000;
+
+export const evaluationApi = {
+  evaluateSheet: (sheetId) =>
+    api.post(`/evaluation/sheets/${sheetId}`, null, { timeout: EVAL_TIMEOUT }).then((r) => r.data),
+
+  evaluateAll: (sessionId) =>
+    api.post(`/evaluation/sessions/${sessionId}/evaluate-all`, null, { timeout: EVAL_TIMEOUT })
+      .then((r) => r.data),
+
+  list: (sessionId) =>
+    api.get(`/evaluation/sessions/${sessionId}`).then((r) => r.data),
+
+  override: (reportId, overrides) =>
+    api.patch(`/evaluation/reports/${reportId}/override`, { overrides }).then((r) => r.data),
 };

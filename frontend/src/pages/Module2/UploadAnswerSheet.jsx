@@ -1,24 +1,14 @@
 /**
  * UploadAnswerSheet.jsx — Module 2, Steps 1 & 2
- *
- * Phase 1 — Select Exam Session (unchanged UI from original stub)
- * Phase 2 — Upload a single PDF answer sheet:
- *            • Roll number + optional student name
- *            • Drag-and-drop / browse file picker (PDF only)
- *            • Real upload to POST /api/ocr/extract via ocrApi
- *            • Upload progress bar → processing spinner → navigate to OCRReview
- *
- * NOTE: TrOCR is a line-by-line model — it requires the Python microservice to
- * be running (cd ocr_service && python main.py). Processing time on CPU is
- * ~5–30 seconds per page; a spinner with elapsed time is shown during inference.
+ * Store the sheet on Cloudinary, then score from the photo (no TrOCR).
  */
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 import { useNavigate }                   from 'react-router-dom';
 import { motion, AnimatePresence }       from 'framer-motion';
 import {
   ArrowRight, ArrowLeft, ScanLine, User, CheckCircle2,
-  FileText, Upload, X, AlertCircle, Loader2, Clock,
+  FileText, Upload, X, AlertCircle, Loader2,
 } from 'lucide-react';
 
 import Navbar        from '../../components/layout/Navbar';
@@ -34,7 +24,7 @@ import { useAppStore } from '../../store/useAppStore';
 import { ocrApi }    from '../../services/api';
 import { PAGE_BG }   from '../../utils/theme';
 
-const M2_STEPS = ['Select Exam', 'Upload Sheets', 'Processing', 'Review Flags', 'Results'];
+const M2_STEPS = ['Select Exam', 'Upload Sheets', 'Review', 'Results'];
 
 const STATUS_TONE = {
   Evaluated: 'success', Exported: 'success',
@@ -42,30 +32,19 @@ const STATUS_TONE = {
 };
 
 const MAX_FILE_MB = 50;
-
-// ── Elapsed timer hook ─────────────────────────────────────────────────────────
-function useElapsed(running) {
-  const [elapsed, setElapsed] = useState(0);
-  const intervalRef = useRef(null);
-
-  if (running && !intervalRef.current) {
-    intervalRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
-  }
-  if (!running && intervalRef.current) {
-    clearInterval(intervalRef.current);
-    intervalRef.current = null;
-    // Reset when a new upload starts (handled externally)
-  }
-
-  return elapsed;
-}
+const ACCEPTED_TYPES = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp', 'image/tiff'];
 
 export default function UploadAnswerSheet() {
   const navigate = useNavigate();
 
-  const examSessions     = useAppStore((s) => s.examSessions);
+  const examSessions      = useAppStore((s) => s.examSessions);
   const selectedSessionId = useAppStore((s) => s.selectedSessionId);
-  const selectSession    = useAppStore((s) => s.selectSession);
+  const selectSession     = useAppStore((s) => s.selectSession);
+  const loadSessionsFromBackend = useAppStore((s) => s.loadSessionsFromBackend);
+  const sessionsLoading   = useAppStore((s) => s.sessionsLoading);
+  const answerSheets      = useAppStore((s) => s.answerSheets);
+  const loadAnswerSheets  = useAppStore((s) => s.loadAnswerSheets);
+  const setCurrentAnswerSheet = useAppStore((s) => s.setCurrentAnswerSheet);
 
   const [phase, setPhase]           = useState(1);
   const [file, setFile]             = useState(null);
@@ -74,19 +53,27 @@ export default function UploadAnswerSheet() {
   const [isDragging, setIsDragging] = useState(false);
   const [uploadPct, setUploadPct]   = useState(0);
 
-  // 'idle' | 'uploading' | 'processing' | 'done' | 'error'
+  // 'idle' | 'uploading' | 'done' | 'error'
   const [status, setStatus]   = useState('idle');
   const [errorMsg, setErrorMsg] = useState('');
-  const [elapsed, setElapsedVal] = useState(0);
-  const elapsedRef = useRef(null);
 
   const fileInputRef = useRef(null);
   const selectedSession = examSessions.find((s) => s.id === selectedSessionId) ?? null;
 
+  useEffect(() => {
+    loadSessionsFromBackend();
+  }, [loadSessionsFromBackend]);
+
+  useEffect(() => {
+    if (selectedSessionId) loadAnswerSheets(selectedSessionId);
+  }, [selectedSessionId, loadAnswerSheets]);
+
   // ── File helpers ─────────────────────────────────────────────────────────────
   const validateFile = (f) => {
     if (!f) return 'No file selected.';
-    if (f.type !== 'application/pdf') return 'Only PDF files are accepted.';
+    if (!ACCEPTED_TYPES.includes(f.type) && !f.name.toLowerCase().endsWith('.pdf')) {
+      return 'Upload a PDF or image (JPEG, PNG, WebP, TIFF).';
+    }
     if (f.size > MAX_FILE_MB * 1024 * 1024) return `File exceeds ${MAX_FILE_MB} MB limit.`;
     return null;
   };
@@ -108,22 +95,15 @@ export default function UploadAnswerSheet() {
     if (dropped) pickFile(dropped);
   }, []);
 
-  const startElapsed = () => {
-    setElapsedVal(0);
-    clearInterval(elapsedRef.current);
-    elapsedRef.current = setInterval(() => setElapsedVal((s) => s + 1), 1000);
-  };
-  const stopElapsed = () => clearInterval(elapsedRef.current);
-
   // ── Submit ────────────────────────────────────────────────────────────────────
   const handleSubmit = async () => {
-    if (!file) { setErrorMsg('Please select a PDF file.'); return; }
+    if (!file) { setErrorMsg('Please select a PDF or image file.'); return; }
     if (!rollNumber.trim()) { setErrorMsg('Roll number is required.'); return; }
+    if (!selectedSessionId) { setErrorMsg('Select an exam session first.'); return; }
 
     setErrorMsg('');
     setStatus('uploading');
     setUploadPct(0);
-    startElapsed();
 
     const form = new FormData();
     form.append('pdf', file);
@@ -132,42 +112,27 @@ export default function UploadAnswerSheet() {
     if (selectedSessionId)  form.append('sessionId', selectedSessionId);
 
     try {
-      // Phase 1: file upload (tracked by onUploadProgress)
-      setStatus('uploading');
       const resp = await ocrApi.extract(form, (pct) => {
         setUploadPct(pct);
-        // Once upload is 100%, switch to "processing" (TrOCR inference)
-        if (pct === 100) setStatus('processing');
       });
 
-      stopElapsed();
       setStatus('done');
-
-      // Navigate to OCRReview, passing the result in router state
-      navigate('/module2/ocr', { state: { ocrData: resp.data } });
+      if (resp.data?.answerSheetId) setCurrentAnswerSheet(resp.data.answerSheetId);
+      await loadAnswerSheets(selectedSessionId);
+      navigate('/module2/mapping');
 
     } catch (err) {
-      stopElapsed();
       setStatus('error');
       const serverMsg = err?.response?.data?.error
         || err?.response?.data?.detail
         || err?.message
         || 'Upload failed. Please try again.';
 
-      // Surface a helpful hint if the Python service is down
-      if (serverMsg.includes('OCR microservice') || err?.code === 'ECONNABORTED') {
-        setErrorMsg(
-          'The OCR service is not responding. ' +
-          'Please start it with: cd ocr_service && python main.py'
-        );
-      } else {
-        setErrorMsg(serverMsg);
-      }
+      setErrorMsg(serverMsg);
     }
   };
 
-  const isLoading = status === 'uploading' || status === 'processing';
-  const fmt = (s) => `${Math.floor(s / 60).toString().padStart(2, '0')}:${(s % 60).toString().padStart(2, '0')}`;
+  const isLoading = status === 'uploading';
 
   // ── Phase 1: Select Exam ──────────────────────────────────────────────────────
   if (phase === 1) {
@@ -188,7 +153,9 @@ export default function UploadAnswerSheet() {
                 </p>
               </div>
 
-              {examSessions.length === 0 ? (
+              {sessionsLoading ? (
+                <p className="text-sm text-slate-500">Loading exam sessions…</p>
+              ) : examSessions.length === 0 ? (
                 <EmptyState
                   icon={FileText}
                   title="No exam sessions found"
@@ -218,7 +185,9 @@ export default function UploadAnswerSheet() {
                           <div className="min-w-0">
                             <p className="truncate font-bold text-slate-900">{session.examName}</p>
                             <p className="mt-0.5 text-xs text-slate-500">{session.subject}</p>
-                            <p className="mt-0.5 text-[10px] text-slate-600">{session.semester} · {session.session}</p>
+                            <p className="mt-0.5 text-[10px] text-slate-600">
+                              {session.hasModelAnswers ? 'Answer key ready' : 'No answer key yet'}
+                            </p>
                           </div>
                           <StatusBadge tone={STATUS_TONE[session.status] ?? 'neutral'} dot>
                             {session.status}
@@ -342,11 +311,10 @@ export default function UploadAnswerSheet() {
 
                 {/* Model note */}
                 <div className="mt-5 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3">
-                  <p className="text-xs font-semibold text-blue-800">Using TrOCR (microsoft/trocr-base-handwritten)</p>
+                  <p className="text-xs font-semibold text-blue-800">Scored from the sheet photo</p>
                   <p className="mt-1 text-[11px] leading-5 text-blue-700">
-                    The model processes one text line at a time. Each PDF page is
-                    segmented into individual line crops before recognition.
-                    Expect <strong>5–30 seconds per page</strong> on CPU; ~1–5 s on GPU.
+                    The file is stored and later marked by Gemini against the Module 1
+                    marking criteria. Handwriting OCR is not used.
                   </p>
                 </div>
               </Card>
@@ -393,7 +361,7 @@ export default function UploadAnswerSheet() {
                   ) : (
                     <>
                       <p className="mt-3 text-sm font-semibold text-slate-900">
-                        Drop the answer sheet PDF here
+                        Drop the answer sheet here
                       </p>
                       <p className="mt-1 text-xs text-slate-500">or click to browse · max {MAX_FILE_MB} MB</p>
                     </>
@@ -409,7 +377,7 @@ export default function UploadAnswerSheet() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="application/pdf"
+                  accept="application/pdf,image/jpeg,image/png,image/webp,image/tiff"
                   className="hidden"
                   onChange={onInputChange}
                 />
@@ -444,35 +412,63 @@ export default function UploadAnswerSheet() {
                       <ProgressBar value={uploadPct} tone="blue" height="h-1.5" showValue={false} />
                     </motion.div>
                   )}
-
-                  {status === 'processing' && (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="mt-4 rounded-xl border border-blue-100 bg-blue-50 px-4 py-3"
-                    >
-                      <div className="flex items-center gap-2">
-                        <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
-                        <p className="text-xs font-semibold text-blue-800">TrOCR processing…</p>
-                        <span className="ml-auto flex items-center gap-1 text-[10px] text-blue-600">
-                          <Clock className="h-3 w-3" /> {fmt(elapsed)}
-                        </span>
-                      </div>
-                      <p className="mt-1.5 text-[11px] leading-5 text-blue-700">
-                        Segmenting lines and running handwriting recognition. This can
-                        take several minutes on CPU — please keep this tab open.
-                      </p>
-                    </motion.div>
-                  )}
                 </AnimatePresence>
 
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <StatusBadge tone="info" dot>PDF only</StatusBadge>
+                  <StatusBadge tone="info" dot>PDF or image</StatusBadge>
                   <StatusBadge tone="neutral">Max {MAX_FILE_MB} MB</StatusBadge>
-                  <StatusBadge tone="warning" dot>TrOCR · line-by-line</StatusBadge>
                 </div>
               </Card>
             </div>
+
+            {answerSheets.length > 0 && (
+              <Card className="mt-5">
+                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500">Stored sheets</p>
+                <h3 className="mt-1 text-base font-bold text-slate-900">
+                  {answerSheets.length} student{answerSheets.length === 1 ? '' : 's'} uploaded
+                </h3>
+                <p className="mt-1 text-xs text-slate-500">
+                  Original files are kept on Cloudinary (free tier) so you can re-open them later.
+                </p>
+                <div className="mt-4 divide-y divide-slate-100">
+                  {answerSheets.map((sheet) => (
+                    <div key={sheet.id} className="flex items-center gap-3 py-3 first:pt-0 last:pb-0">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-sm font-semibold text-slate-900">
+                          {sheet.studentName || sheet.rollNumber}
+                        </p>
+                        <p className="text-[11px] text-slate-500">
+                          {sheet.rollNumber}
+                        </p>
+                      </div>
+                      <StatusBadge tone={sheet.status === 'evaluated' ? 'success' : 'info'}>
+                        {sheet.status === 'uploaded' ? 'ready' : sheet.status}
+                      </StatusBadge>
+                      {sheet.fileUrl && (
+                        <a
+                          href={sheet.fileUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs font-semibold text-blue-600 hover:text-blue-800"
+                        >
+                          File
+                        </a>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => {
+                          setCurrentAnswerSheet(sheet.id);
+                          navigate('/module2/mapping');
+                        }}
+                      >
+                        Review
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            )}
 
             {/* Actions */}
             <div className="mt-5 flex items-center justify-between">
@@ -491,9 +487,7 @@ export default function UploadAnswerSheet() {
                   ? <Loader2 className="h-4 w-4 animate-spin" />
                   : <Upload className="h-4 w-4" />}
               >
-                {status === 'uploading' ? `Uploading (${uploadPct}%)` :
-                 status === 'processing' ? 'Processing…' :
-                 'Extract Text'}
+                {status === 'uploading' ? `Uploading (${uploadPct}%)` : 'Upload sheet'}
               </Button>
             </div>
           </div>

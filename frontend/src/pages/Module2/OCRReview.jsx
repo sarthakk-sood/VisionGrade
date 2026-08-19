@@ -13,7 +13,7 @@
  *  - "Continue to Mapping" CTA (links to /module2/mapping)
  */
 
-import { useState }                from 'react';
+import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -32,6 +32,8 @@ import ProgressBar   from '../../components/common/ProgressBar';
 import StatusBadge   from '../../components/common/StatusBadge';
 import EmptyState    from '../../components/common/EmptyState';
 import { PAGE_BG }   from '../../utils/theme';
+import { useAppStore } from '../../store/useAppStore';
+import { ocrApi } from '../../services/api';
 
 const M2_STEPS = ['Select Exam', 'Upload Sheets', 'Processing', 'Review Flags', 'Results'];
 
@@ -51,15 +53,90 @@ const confBg = (c) =>
 export default function OCRReview() {
   const location = useLocation();
   const navigate = useNavigate();
+  const currentAnswerSheetId = useAppStore((s) => s.currentAnswerSheetId);
+  const setCurrentAnswerSheet = useAppStore((s) => s.setCurrentAnswerSheet);
 
-  // ocrData passed from UploadAnswerSheet via navigate(..., { state: { ocrData } })
-  const ocrData = location.state?.ocrData ?? null;
+  const [ocrData, setOcrData] = useState(location.state?.ocrData ?? null);
+  const [loadError, setLoadError] = useState('');
+  const [loading, setLoading] = useState(!location.state?.ocrData);
+
+  useEffect(() => {
+    const sheetId = location.state?.ocrData?.answerSheetId
+      || location.state?.sheetId
+      || currentAnswerSheetId;
+    if (location.state?.ocrData) {
+      if (location.state.ocrData.answerSheetId) {
+        setCurrentAnswerSheet(location.state.ocrData.answerSheetId);
+      }
+      setLoading(false);
+      return;
+    }
+    if (!sheetId) {
+      setLoading(false);
+      return;
+    }
+    let cancelled = false;
+    ocrApi.get(sheetId)
+      .then((resp) => {
+        if (cancelled) return;
+        const sheet = resp.data;
+        setCurrentAnswerSheet(sheet._id || sheetId);
+        setOcrData({
+          answerSheetId: sheet._id,
+          rollNumber: sheet.rollNumber,
+          studentName: sheet.studentName,
+          sessionId: sheet.sessionId,
+          fileUrl: sheet.fileUrl,
+          totalPages: sheet.pageCount || sheet.pages?.length || 0,
+          avgConfidence: sheet.ocrConfidence,
+          lowConfidencePages: (sheet.pages || [])
+            .filter((p) => p.confidence < 70)
+            .map((p) => p.pageNumber),
+          isLowConfidence: sheet.isFlaggedForReview,
+          pages: sheet.pages || [],
+        });
+      })
+      .catch((err) => {
+        if (!cancelled) setLoadError(err?.response?.data?.error || 'Could not load OCR result.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [location.state, currentAnswerSheetId, setCurrentAnswerSheet]);
 
   const [expandedPage, setExpandedPage] = useState(null);
-  const [showLines, setShowLines]       = useState({});   // { [pageNum]: boolean }
+  const [showLines, setShowLines]       = useState({});
   const [copied, setCopied]             = useState(false);
+  const [editText, setEditText]         = useState('');
+  const [savingText, setSavingText]     = useState(false);
+  const [saveMsg, setSaveMsg]           = useState('');
 
-  // ── Guard: no state → redirect ────────────────────────────────────────────────
+  useEffect(() => {
+    if (!ocrData?.pages) return;
+    const text = (ocrData.pages || [])
+      .map((p) => `--- Page ${p.pageNumber} ---\n${p.text}`)
+      .join('\n\n');
+    setEditText(text);
+  }, [ocrData]);
+
+  if (loading) {
+    return (
+      <div className={PAGE_BG}>
+        <Navbar />
+        <PageContainer subtitle="Module 2 / Step 3" title="Processing Dashboard">
+          <div className="flex flex-col gap-6 lg:flex-row">
+            <Sidebar />
+            <div className="flex-1 min-w-0">
+              <Stepper steps={M2_STEPS} currentStep={3} />
+              <EmptyState icon={FileText} title="Loading OCR results…" description="Fetching the stored extraction for this answer sheet." />
+            </div>
+          </div>
+        </PageContainer>
+      </div>
+    );
+  }
+
   if (!ocrData) {
     return (
       <div className={PAGE_BG}>
@@ -72,7 +149,7 @@ export default function OCRReview() {
               <EmptyState
                 icon={FileText}
                 title="No OCR results found"
-                description="Upload an answer sheet PDF first to see extraction results here."
+                description={loadError || 'Upload an answer sheet PDF first to see extraction results here.'}
                 action={
                   <Button onClick={() => navigate('/module2/upload')}>
                     Go to Upload
@@ -88,20 +165,34 @@ export default function OCRReview() {
 
   const {
     rollNumber, studentName, totalPages,
-    avgConfidence, lowConfidencePages,
-    isLowConfidence, pages,
+    avgConfidence, lowConfidencePages = [],
+    isLowConfidence, pages = [],
   } = ocrData;
 
-  // Full text for copy area
+  // Full text for copy / correct-before-marking
   const fullText = pages
     .map((p) => `--- Page ${p.pageNumber} ---\n${p.text}`)
     .join('\n\n');
 
   const handleCopy = () => {
-    navigator.clipboard.writeText(fullText).then(() => {
+    navigator.clipboard.writeText(editText || fullText).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
+  };
+
+  const handleSaveText = async () => {
+    if (!ocrData?.answerSheetId) return;
+    setSavingText(true);
+    setSaveMsg('');
+    try {
+      await ocrApi.updateText(ocrData.answerSheetId, { ocrRawText: editText });
+      setSaveMsg('Saved. Scoring will use this corrected text.');
+    } catch (err) {
+      setSaveMsg(err?.response?.data?.error || err.message || 'Could not save text');
+    } finally {
+      setSavingText(false);
+    }
   };
 
   const togglePage = (num) =>
@@ -395,15 +486,28 @@ export default function OCRReview() {
                 </button>
               </div>
               <textarea
-                readOnly
-                value={fullText}
+                value={editText}
+                onChange={(e) => setEditText(e.target.value)}
                 rows={12}
-                className="w-full resize-none rounded-xl border border-slate-200 bg-slate-900 px-4 py-3 font-mono text-xs leading-6 text-slate-100 focus:outline-none"
+                className="w-full resize-y rounded-xl border border-slate-200 bg-slate-900 px-4 py-3 font-mono text-xs leading-6 text-slate-100 focus:outline-none"
               />
-              <p className="mt-2 text-[10px] text-slate-400">
-                Raw TrOCR output — no evaluation or scoring applied. This text will be
-                consumed by Module 3 for answer matching.
-              </p>
+              <div className="mt-2 flex items-center justify-between gap-3">
+                <p className="text-[10px] text-slate-400">
+                  Correct the text so each answer sits under Q1, Q2, … then save before scoring.
+                  {ocrData.fileUrl && (
+                    <>
+                      {' '}
+                      <a href={ocrData.fileUrl} target="_blank" rel="noreferrer" className="text-blue-600 font-semibold">
+                        Open original file
+                      </a>
+                    </>
+                  )}
+                </p>
+                <Button type="button" onClick={handleSaveText} loading={savingText}>
+                  Save OCR text
+                </Button>
+              </div>
+              {saveMsg && <p className="mt-2 text-[11px] text-slate-600">{saveMsg}</p>}
             </Card>
 
             {/* ── Actions ── */}

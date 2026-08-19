@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import {
   LayoutDashboard, ClipboardList, UploadCloud,
   PieChart, BrainCircuit, FileEdit, Download, Home, FileText,
-  ScanLine, Cpu, AlertTriangle, BarChart3, FileBarChart2,
+  ScanLine, AlertTriangle, BarChart3, FileBarChart2,
 } from 'lucide-react';
 import { useAppStore } from '../../store/useAppStore';
 import StatusBadge from '../common/StatusBadge';
@@ -40,8 +40,7 @@ const sections = [
     heading: 'Module 2 — Evaluate',
     items: [
       { label: 'Upload Sheets',   to: '/module2/upload',   icon: ScanLine      },
-      { label: 'Processing',      to: '/module2/ocr',      icon: Cpu           },
-      { label: 'Review Flags',    to: '/module2/mapping',  icon: AlertTriangle },
+      { label: 'Review',          to: '/module2/mapping',  icon: AlertTriangle },
       { label: 'Results',         to: '/module2/evaluate', icon: BarChart3     },
       { label: 'Final Report',    to: '/module2/report',   icon: FileBarChart2 },
     ],

@@ -2,6 +2,7 @@ const Project = require('../models/Project');
 const ExamSession = require('../models/ExamSession');
 const SourceDocument = require('../models/sourceDocument');
 const { generateModelAnswers } = require('../services/answerGenerationService');
+const { criteriaToSchemeString, normalizeCriteria } = require('../utils/markingCriteria');
 const { buildQuestionPaperLatex, buildAnswerKeyLatex } = require('../services/latexExportService');
 const { compileLatexToPdf } = require('../services/latexCompileService');
 const { sanitizeFilename } = require('../utils/latexEscape');
@@ -81,13 +82,20 @@ const collectSourceDocuments = async (project) => {
 };
 
 const buildFallbackAnswers = (approvedPayload) =>
-  approvedPayload.map((q, i) => ({
-    questionNumber: i + 1,
-    correctAnswer:  q.correctAnswer || '',
-    modelAnswer:    q.correctAnswer || q.explanation || '',
-    markingScheme:  `Full marks (${q.marks}): complete and accurate answer.`,
-    explanation:    q.explanation || '',
-  }));
+  approvedPayload.map((q, i) => {
+    const markingCriteria = normalizeCriteria(q.markingCriteria || q.markingScheme, q.marks);
+    const fallback = markingCriteria.length
+      ? markingCriteria
+      : [{ point: 'Accurate complete answer', marks: Number(q.marks) || 0 }];
+    return {
+      questionNumber: i + 1,
+      correctAnswer:  q.correctAnswer || '',
+      modelAnswer:    q.correctAnswer || q.explanation || '',
+      markingCriteria: fallback,
+      markingScheme:  criteriaToSchemeString(fallback) || `Full marks (${q.marks}): complete and accurate answer.`,
+      explanation:    q.explanation || '',
+    };
+  });
 
 const formatSession = (session) => ({
   id:              session._id,
@@ -113,6 +121,7 @@ const formatSession = (session) => ({
     correctAnswer:  q.correctAnswer,
     modelAnswer:    q.modelAnswer,
     markingScheme:  q.markingScheme,
+    markingCriteria: q.markingCriteria || [],
     explanation:    q.explanation,
   })),
 });
@@ -188,7 +197,10 @@ const finalizeSession = async (req, res, next) => {
         options:          q.options || [],
         correctAnswer:    llm.correctAnswer || q.correctAnswer || '',
         modelAnswer:      llm.modelAnswer || q.correctAnswer || q.explanation || '',
-        markingScheme:    llm.markingScheme || `Full marks (${q.marks}): accurate complete answer.`,
+        markingCriteria:  llm.markingCriteria || [],
+        markingScheme:    llm.markingScheme
+          || criteriaToSchemeString(llm.markingCriteria)
+          || `Full marks (${q.marks}): accurate complete answer.`,
         explanation:      llm.explanation || q.explanation || '',
       };
     });
@@ -206,6 +218,7 @@ const finalizeSession = async (req, res, next) => {
       q.correctAnswer = sq.correctAnswer;
       q.modelAnswer   = sq.modelAnswer;
       q.markingScheme = sq.markingScheme;
+      q.markingCriteria = sq.markingCriteria;
       q.explanation   = sq.explanation;
     });
     project.status = 'approved';
@@ -262,6 +275,7 @@ const listSessions = async (req, res, next) => {
         questionCount: s.questionCount,
         status:        s.status,
         answerProvider: s.answerProvider,
+        hasAnswerKey:  Boolean(s.answerProvider),
         finalizedAt:   s.finalizedAt,
         createdAt:     s.createdAt,
       })),
