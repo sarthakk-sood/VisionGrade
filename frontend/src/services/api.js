@@ -5,6 +5,13 @@ export const api = axios.create({
   timeout: 120000, // 2 min — topic detection can take ~60s with Gemini retry
 });
 
+/**
+ * Question generation and answer generation run the LLM once per small batch of
+ * questions so each batch can be given the source passages it needs, so a full
+ * paper takes several sequential calls.
+ */
+const LLM_BATCH_TIMEOUT = 6 * 60 * 1000;
+
 // ── Auth interceptor — attach JWT from localStorage automatically ─────────────
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('vg_token');
@@ -56,7 +63,8 @@ export const topicApi = {
 // ── Question Generation API ────────────────────────────────────────────────────
 export const questionApi = {
   generate: (projectId, config) =>
-    api.post('/questions/generate', { projectId, ...config }).then((r) => r.data),
+    api.post('/questions/generate', { projectId, ...config }, { timeout: LLM_BATCH_TIMEOUT })
+      .then((r) => r.data),
 
   list: (projectId) =>
     api.get(`/questions/list/${projectId}`).then((r) => r.data),
@@ -73,7 +81,7 @@ export const questionApi = {
   regenerateSingle: (projectId, questionId, { questionType, topicName, marks, difficulty }) =>
     api.post('/questions/regenerate-single', {
       projectId, questionId, questionType, topicName, marks, difficulty,
-    }).then((r) => r.data),
+    }, { timeout: LLM_BATCH_TIMEOUT }).then((r) => r.data),
 
   approveSelection: (projectId, questionIds) =>
     api.patch(`/questions/${projectId}/approve-selection`, { questionIds }).then((r) => r.data),
@@ -82,7 +90,8 @@ export const questionApi = {
 // ── Exam Session API ─────────────────────────────────────────────────────────
 export const sessionApi = {
   finalize: (projectId) =>
-    api.post(`/sessions/finalize/${projectId}`).then((r) => r.data),
+    api.post(`/sessions/finalize/${projectId}`, null, { timeout: LLM_BATCH_TIMEOUT })
+      .then((r) => r.data),
 
   list: () =>
     api.get('/sessions').then((r) => r.data),

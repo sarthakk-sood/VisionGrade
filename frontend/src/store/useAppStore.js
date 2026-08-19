@@ -64,6 +64,11 @@ const mapApiQuestion = (q, idx) => ({
   explanation: q.explanation || '',
   modelAnswer: q.modelAnswer || '',
   markingScheme: q.markingScheme || '',
+  // Provenance — the PDF passage this question was written from.
+  sourceEvidence: q.sourceEvidence || '',
+  sourceFile:     q.sourceFile || '',
+  sourcePage:     q.sourcePage ?? null,
+  grounded:       q.grounded ?? false,
 });
 
 const mapApiSession = (s, questions = null) => {
@@ -148,6 +153,11 @@ export const useAppStore = create((set, get) => ({
   questionsError:     null,
   generationProvider: null,
 
+  // How many questions had their source passage verified in the uploaded PDFs,
+  // plus any allocation warnings the backend reported.
+  groundedCount:       0,
+  generationWarnings:  [],
+
   // ─── Actions ───────────────────────────────────────────────────────────────
   setLoadingState: (key, value) =>
     set((s) => ({ loadingStates: { ...s.loadingStates, [key]: value } })),
@@ -176,6 +186,8 @@ export const useAppStore = create((set, get) => ({
       questionsError:   null,
       topicsError:      null,
       uploadedFiles:    [],
+      groundedCount:      0,
+      generationWarnings: [],
       examInfo: {
         examTitle: '', subject: '', totalMarks: 100, durationMinutes: 90,
         instructions: [],
@@ -500,6 +512,10 @@ export const useAppStore = create((set, get) => ({
                 options:     newQ.options ?? q.options,
                 answer:      newQ.correctAnswer,
                 explanation: newQ.explanation,
+                sourceEvidence: newQ.sourceEvidence || '',
+                sourceFile:     newQ.sourceFile || '',
+                sourcePage:     newQ.sourcePage ?? null,
+                grounded:       newQ.grounded ?? false,
                 approved:    false,
               }
             : q,
@@ -711,6 +727,9 @@ export const useAppStore = create((set, get) => ({
         weightage:     t.weightage     || 0,
         marks:         t.marks         || 0,
         difficulty:    t.difficulty    || 'Mixed',
+        // Used server-side to retrieve the PDF passages for this topic.
+        description:   t.description   || '',
+        keywords:      t.keywords      || [],
       }));
 
     try {
@@ -721,6 +740,8 @@ export const useAppStore = create((set, get) => ({
       set({
         generatedQuestions: data.questions,
         generationProvider: data.provider,
+        groundedCount:      data.groundedCount ?? 0,
+        generationWarnings: data.warnings || [],
         questionsLoading:   false,
         questions: data.questions.map(mapApiQuestion),
       });

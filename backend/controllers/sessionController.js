@@ -56,21 +56,28 @@ const sendPdfExport = async (res, session, texBuilder, suffix) => {
   return res.status(200).send(pdf);
 };
 
-const collectSourceTexts = async (project) => {
+/** Source documents in the shape the retrieval layer expects. */
+const collectSourceDocuments = async (project) => {
   const docs = await SourceDocument.find({ projectId: project._id });
-  const selected = docs.length
-    ? docs.filter((d) => d.isSelected !== false)
-    : [];
 
-  const texts = selected
-    .map((d) => (d.extractedText || '').trim())
-    .filter(Boolean);
+  const documents = docs
+    .filter((d) => d.isSelected !== false)
+    .map((d) => ({
+      filename:      d.filename || 'Source document',
+      pages:         (d.pages || []).map((p) => ({ num: p.num, text: p.text })),
+      extractedText: (d.extractedText || '').trim(),
+    }))
+    .filter((d) => d.extractedText.length || d.pages.length);
 
   if (project.extractedText?.trim()) {
-    texts.push(project.extractedText.trim());
+    documents.push({
+      filename: project.title || 'Project text',
+      pages: [],
+      extractedText: project.extractedText.trim(),
+    });
   }
 
-  return [...new Set(texts)];
+  return documents;
 };
 
 const buildFallbackAnswers = (approvedPayload) =>
@@ -124,7 +131,7 @@ const finalizeSession = async (req, res, next) => {
       });
     }
 
-    const extractedTexts = await collectSourceTexts(project);
+    const sourceDocuments = await collectSourceDocuments(project);
 
     const examInfo = {
       examTitle:       project.examInfo?.examTitle || project.title,
@@ -143,13 +150,15 @@ const finalizeSession = async (req, res, next) => {
       options:       q.options,
       correctAnswer: q.correctAnswer,
       explanation:   q.explanation,
+      // Anchors answer retrieval to the passage the question came from.
+      sourceEvidence: q.sourceEvidence || '',
     }));
 
     let llmAnswers = [];
     let provider = 'fallback-existing';
 
     try {
-      const result = await generateModelAnswers(approvedPayload, extractedTexts, examInfo);
+      const result = await generateModelAnswers(approvedPayload, sourceDocuments, examInfo);
       llmAnswers = result.answers;
       provider = result.provider;
     } catch (llmErr) {

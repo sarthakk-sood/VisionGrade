@@ -28,13 +28,34 @@ const uploadAndParsePDF = async (buffer, originalName) => {
   const extractedText = (lineStore.text || '').replace(/\s+/g, ' ').trim();
   const numPages = lineStore.total || 0;
 
+  // Per-page text lets retrieved excerpts be attributed to a page, so a teacher
+  // reviewing a generated question can find the passage it came from.
+  const pages = (lineStore.pages || [])
+    .map((p, i) => ({
+      num: p.num ?? i + 1,
+      text: (p.text || '').replace(/\s+/g, ' ').trim(),
+    }))
+    .filter((p) => p.text.length);
+
   // Clean up parser resources
   await parser.destroy();
+
+  // Page text duplicates extractedText, so skip it on very large PDFs rather
+  // than risk pushing the Mongo document towards its 16MB ceiling.
+  const pagesSize = pages.reduce((sum, p) => sum + p.text.length, 0);
+  const keepPages = pagesSize > 0 && pagesSize <= 1_500_000;
+
+  if (!keepPages && pages.length) {
+    console.warn(
+      `[pdfService] ${originalName}: page-level text omitted (${pagesSize} chars); excerpts will cite the file only.`
+    );
+  }
 
   return {
     url: cloudinaryResult.secure_url,
     publicId: cloudinaryResult.public_id,
     extractedText,
+    pages: keepPages ? pages : [],
     pageCount: numPages,
   };
 };

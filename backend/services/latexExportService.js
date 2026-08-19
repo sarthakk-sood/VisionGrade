@@ -41,9 +41,13 @@ const PREAMBLE = `\\documentclass[11pt,a4paper]{article}
 \\usepackage{enumitem}
 \\usepackage{array}
 \\usepackage{tabularx}
+\\usepackage{microtype}
 
 \\definecolor{vgblue}{RGB}{37,99,235}
 \\definecolor{vggrey}{RGB}{100,116,139}
+
+\\emergencystretch=2em
+\\sloppy
 
 % Simple page style — NO \\leftmark so no blank pages from starred sections
 \\pagestyle{fancy}

@@ -2,8 +2,12 @@ const OpenAI = require('openai');
 const { GoogleGenAI } = require('@google/genai');
 const {
   GROQ_TOPIC_INPUT_CHARS,
+  GROQ_MODEL,
+  GEMINI_MODELS,
+  groqChatJsonCompletion,
+  isModelAccessError,
   isQuotaError,
-  parseGeminiRetryDelay,
+  parseProviderRetryDelay,
   sleep,
   truncateDocuments,
 } = require('../utils/llmUtils');
@@ -133,11 +137,10 @@ const detectTopicsWithGroq = async (extractedTexts, subject) => {
   const groq = getGroq();
   const userPrompt = buildUserPrompt(extractedTexts, subject);
 
-  const response = await groq.chat.completions.create({
-    model: 'llama-3.1-8b-instant',
+  const response = await groqChatJsonCompletion(groq, {
+    model: GROQ_MODEL,
     temperature: 0.2,
     max_tokens: 1536,
-    response_format: { type: 'json_object' },
     messages: [
       { role: 'system', content: TOPIC_DETECTION_SYSTEM_PROMPT },
       { role: 'user', content: userPrompt },
@@ -150,7 +153,7 @@ const detectTopicsWithGroq = async (extractedTexts, subject) => {
   const result = parseTopicsResponse(raw);
   return {
     ...result,
-    provider: 'groq-llama-3.1-8b',
+    provider: `groq-${GROQ_MODEL}`,
     usage: {
       promptTokens: response.usage?.prompt_tokens,
       completionTokens: response.usage?.completion_tokens,
@@ -184,12 +187,9 @@ const callGeminiModel = async (modelName, extractedTexts, subject) => {
 // Gemini fallback — tries models in order, with auto-retry on 429
 //
 // Strategy:
-//   1. gemini-2.5-flash          (confirmed working in test.js)
-//   2. If 429 → wait suggested retry delay → try again once
-//   3. If still 429 → try gemini-2.0-flash-lite (separate quota bucket)
+// Gemini fallback — tries models in order, with auto-retry on 429.
+// Default: gemini-2.5-flash (override via GEMINI_MODELS in .env).
 // ─────────────────────────────────────────────────────────────────────────────
-const GEMINI_MODELS = ['gemini-2.0-flash-lite', 'gemini-2.5-flash'];
-
 const detectTopicsWithGemini = async (extractedTexts, subject) => {
   let lastErr;
 
@@ -201,11 +201,15 @@ const detectTopicsWithGemini = async (extractedTexts, subject) => {
         return result;
       } catch (err) {
         lastErr = err;
+        if (isModelAccessError(err)) {
+          console.warn(`[llmService] ${modelName} unavailable, trying next model…`);
+          break;
+        }
         if (!isQuotaError(err)) {
           throw err;
         }
 
-        const retryMs = parseGeminiRetryDelay(err.message, attempt);
+        const retryMs = parseProviderRetryDelay(err.message, attempt);
         console.warn(`[llmService] ${modelName} unavailable/rate-limited. Waiting ${Math.round(retryMs / 1000)}s…`);
         await sleep(retryMs);
       }

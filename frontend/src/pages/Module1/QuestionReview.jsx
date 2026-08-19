@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Check, RefreshCw, Edit3, Copy, Trash2, Plus,
   AlertTriangle, CheckCircle2, ArrowRight, ArrowLeft, Download, AlertCircle,
+  FileText, Quote,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Navbar        from '../../components/layout/Navbar';
@@ -25,6 +26,70 @@ const DIFF_STYLE = {
   Medium: 'bg-amber-100 text-amber-800 border border-amber-200',
   Hard:   'bg-rose-100 text-rose-800 border border-rose-200',
 };
+
+/**
+ * The passage a question was generated from, with the location in the uploaded
+ * PDF. This is how a teacher confirms a question came from their material
+ * rather than from the model's general knowledge of the topic.
+ */
+function SourceEvidence({ question }) {
+  const [open, setOpen] = useState(false);
+
+  if (!question.sourceEvidence) {
+    return (
+      <p className="mt-3 flex items-center gap-1.5 text-[10px] text-amber-700">
+        <AlertTriangle className="h-3 w-3 shrink-0" />
+        No source passage recorded — this question may not come from your PDFs.
+      </p>
+    );
+  }
+
+  const location = [question.sourceFile, question.sourcePage ? `page ${question.sourcePage}` : null]
+    .filter(Boolean)
+    .join(' · ');
+
+  return (
+    <div className="mt-3">
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[10px] font-semibold transition ${
+          question.grounded
+            ? 'border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100'
+            : 'border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100'
+        }`}
+      >
+        {question.grounded ? <FileText className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+        {question.grounded ? 'From your PDF' : 'Not verified in your PDF'}
+        {location && <span className="font-normal opacity-80">· {location}</span>}
+      </button>
+
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="overflow-hidden"
+          >
+            <div className="mt-2 flex gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+              <Quote className="mt-0.5 h-3 w-3 shrink-0 text-slate-400" />
+              <div>
+                <p className="text-[11px] italic leading-5 text-slate-600">{question.sourceEvidence}</p>
+                {!question.grounded && (
+                  <p className="mt-1.5 text-[10px] text-amber-700">
+                    This wording could not be found in your uploaded text, so the question may be generic.
+                    Regenerate it or edit it before approving.
+                  </p>
+                )}
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
 
 function ActionBtn({ onClick, className, icon: Icon, label, loading = false, disabled = false }) {
   return (
@@ -249,6 +314,8 @@ export default function QuestionReview() {
                             ✓ Answer: {q.answer}
                           </p>
                         )}
+
+                        <SourceEvidence question={q} />
 
                         <div className="mt-4 flex flex-wrap items-center gap-2">
                           <ActionBtn

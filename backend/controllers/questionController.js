@@ -26,7 +26,40 @@ const formatQuestion = (q) => ({
   modelAnswer:   q.modelAnswer || '',
   markingScheme: q.markingScheme || '',
   approved:      q.approved ?? false,
+  sourceEvidence: q.sourceEvidence || '',
+  sourceFile:     q.sourceFile || '',
+  sourcePage:     q.sourcePage ?? null,
+  grounded:       q.grounded ?? false,
 });
+
+/** Documents in the shape the retrieval layer expects. */
+const loadSourceDocuments = async (projectId) => {
+  const docs = await SourceDocument.find({ projectId, isSelected: true });
+  return (docs || [])
+    .map((d) => ({
+      filename:      d.filename || 'Source document',
+      pages:         (d.pages || []).map((p) => ({ num: p.num, text: p.text })),
+      extractedText: d.extractedText || '',
+    }))
+    .filter((d) => d.extractedText.trim().length || d.pages.length);
+};
+
+/**
+ * Topic detection already stored a description and keywords for each topic.
+ * Retrieval needs them to find the right passages, so merge them back into the
+ * per-topic config the client sends.
+ */
+const enrichTopics = (topics, project) => {
+  const meta = new Map((project.topics || []).map((t) => [t.name, t]));
+  return topics.map((t) => {
+    const detected = meta.get(t.topicName);
+    return {
+      ...t,
+      description: t.description || detected?.description || '',
+      keywords:    t.keywords?.length ? t.keywords : (detected?.keywords || []),
+    };
+  });
+};
 
 const loadOwnedProject = async (projectId, teacherId) => {
   const project = await Project.findById(projectId);
@@ -110,7 +143,7 @@ const uploadPDFs = async (req, res, next) => {
 
     const results = await Promise.all(
       files.map(async (file) => {
-        const { url, publicId, extractedText, pageCount } =
+        const { url, publicId, extractedText, pages, pageCount } =
           await uploadAndParsePDF(file.buffer, file.originalname);
 
         const doc = await SourceDocument.create({
@@ -120,6 +153,7 @@ const uploadPDFs = async (req, res, next) => {
           pdfUrl:        url,
           publicId,
           extractedText,
+          pages:         pages || [],
           pageCount,
           isSelected:    true,
         });
@@ -171,14 +205,12 @@ const generateQuestionsHandler = async (req, res, next) => {
 
     const project = await loadOwnedProject(projectId, req.teacher._id);
 
-    const docs = await SourceDocument.find({ projectId: project._id, isSelected: true });
-    if (!docs?.length) {
-      return res.status(400).json({ success: false, error: 'No source documents found. Please upload PDFs first.' });
-    }
-
-    const extractedTexts = docs.map((d) => d.extractedText || '').filter((t) => t.trim().length > 0);
-    if (!extractedTexts.length) {
-      return res.status(400).json({ success: false, error: 'No readable text found in uploaded PDFs.' });
+    const sourceDocuments = await loadSourceDocuments(project._id);
+    if (!sourceDocuments.length) {
+      return res.status(400).json({
+        success: false,
+        error: 'No readable text found in the uploaded PDFs. Please upload PDFs with extractable text.',
+      });
     }
 
     const config = {
@@ -190,10 +222,10 @@ const generateQuestionsHandler = async (req, res, next) => {
         instructions:    examInfo.instructions || [],
         questionTypes:   examInfo.questionTypes || {},
       },
-      topics,
+      topics: enrichTopics(topics, project),
     };
 
-    const result = await generateQuestions(config, extractedTexts);
+    const result = await generateQuestions(config, sourceDocuments);
 
     project.examInfo           = config.examInfo;
     project.generatedQuestions = result.questions;
@@ -218,6 +250,8 @@ const generateQuestionsHandler = async (req, res, next) => {
       usage:          result.usage,
       totalQuestions: result.totalQuestions,
       totalMarks:     result.totalMarks,
+      groundedCount:  result.groundedCount,
+      warnings:       result.warnings,
       questions:      project.generatedQuestions.map(formatQuestion),
     });
   } catch (err) {
@@ -386,13 +420,8 @@ const regenerateSingleHandler = async (req, res, next) => {
 
     const project = await loadOwnedProject(projectId, req.teacher._id);
 
-    const docs = await SourceDocument.find({ projectId: project._id, isSelected: true });
-    if (!docs?.length) {
-      return res.status(400).json({ success: false, error: 'No source documents found for this project.' });
-    }
-
-    const extractedTexts = docs.map((d) => d.extractedText || '').filter((t) => t.trim().length > 0);
-    if (!extractedTexts.length) {
+    const sourceDocuments = await loadSourceDocuments(project._id);
+    if (!sourceDocuments.length) {
       return res.status(400).json({ success: false, error: 'No readable text in uploaded PDFs.' });
     }
 
@@ -416,20 +445,30 @@ const regenerateSingleHandler = async (req, res, next) => {
         instructions:    [],
         questionTypes:   { [qType]: { count: 1, marks: qMarks } },
       },
-      topics: [{ topicName: qTopic, marks: qMarks, difficulty: qDiff }],
+      topics: enrichTopics(
+        [{ topicName: qTopic, marks: qMarks, difficulty: qDiff }],
+        project
+      ),
     };
 
-    const result = await generateQuestions(singleConfig, extractedTexts);
+    const result = await generateQuestions(singleConfig, sourceDocuments, {
+      avoidEvidence: [existing.sourceEvidence],
+    });
     const newQ = result.questions[0];
     if (!newQ) {
       return res.status(500).json({ success: false, error: 'LLM returned no question.' });
     }
 
-    existing.questionText = newQ.questionText;
-    existing.options      = newQ.options || [];
-    existing.correctAnswer = newQ.correctAnswer;
-    existing.explanation  = newQ.explanation;
-    existing.approved     = false;
+    existing.questionText   = newQ.questionText;
+    existing.options        = newQ.options || [];
+    existing.correctAnswer  = newQ.correctAnswer;
+    existing.explanation    = newQ.explanation;
+    existing.sourceEvidence = newQ.sourceEvidence || '';
+    existing.sourceFile     = newQ.sourceFile || '';
+    existing.sourcePage     = newQ.sourcePage ?? null;
+    existing.grounded       = newQ.grounded ?? false;
+    existing.groundingScore = newQ.groundingScore ?? 0;
+    existing.approved       = false;
 
     await project.save();
 

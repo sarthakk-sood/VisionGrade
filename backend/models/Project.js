@@ -27,6 +27,15 @@ const generatedQuestionSchema = new mongoose.Schema({
   modelAnswer:  { type: String },
   markingScheme:{ type: String },
   approved:     { type: Boolean, default: false },
+
+  // Provenance — the passage in the uploaded PDF this question was written from.
+  // `grounded` records whether sourceEvidence was actually found in that text,
+  // which is what distinguishes a document-specific question from a generic one.
+  sourceEvidence: { type: String, default: '' },
+  sourceFile:     { type: String, default: '' },
+  sourcePage:     { type: Number, default: null },
+  grounded:       { type: Boolean, default: false },
+  groundingScore: { type: Number, default: 0 },
 }, { _id: true });
 
 // ── Main Project schema ───────────────────────────────────────────────────────

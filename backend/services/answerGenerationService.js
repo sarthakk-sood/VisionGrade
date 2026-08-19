@@ -1,13 +1,25 @@
 const OpenAI = require('openai');
 const { GoogleGenAI } = require('@google/genai');
 const {
-  GROQ_GENERATION_INPUT_CHARS,
+  EVIDENCE_CHARS_PER_BATCH,
+  GROQ_MODEL,
+  GEMINI_MODELS,
+  LLM_BATCH_PAUSE_MS,
+  groqChatJsonCompletion,
+  estimateGroqMaxTokens,
+  extractChatContent,
+  isModelAccessError,
   isQuotaError,
-  parseGeminiRetryDelay,
+  parseJsonFromLlm,
+  parseProviderRetryDelay,
   sleep,
-  truncateDocuments,
-  stripMarkdownFences,
 } = require('../utils/llmUtils');
+const {
+  buildCorpus,
+  retrieve,
+  formatEvidenceBlock,
+  normalizeDocuments,
+} = require('./retrievalService');
 
 const BATCH_SIZE = 4;
 
@@ -34,21 +46,35 @@ const getGemini = () => {
   return _geminiClient;
 };
 
-const SYSTEM_PROMPT = `You are an expert university examiner creating official model answers and marking schemes for an approved question paper.
+// Each question now arrives with the excerpts it was written from, so the model
+// marks against the course material rather than against general knowledge.
+const SYSTEM_PROMPT = `You are a senior university examiner writing the official answer key and marking scheme for a formal degree examination, using the course documents the paper was set from.
 
-For EACH question you receive, produce answers appropriate to the question type:
+Each question comes with VERBATIM EXCERPTS from those documents. The excerpts are the sole authority for the answer.
 
-- **MCQ**: correctAnswer = single letter (A/B/C/D). modelAnswer = full text of the correct option plus 1-2 sentences explaining why it is correct.
-- **ShortAnswer**: modelAnswer = 2–4 clear sentences covering all key points (proportional to marks).
-- **MediumAnswer**: modelAnswer = one well-structured paragraph (roughly 80–150 words for typical marks).
-- **LongAnswer**: modelAnswer = detailed multi-part answer with numbered sub-points, examples, and conclusions (scale length to marks).
-- **FillInTheBlanks**: correctAnswer = the exact word/phrase for the blank. modelAnswer = the completed sentence with brief explanation.
+## Absolute rules
 
-For every question also provide:
-- **markingScheme**: bullet-style partial credit breakdown totalling the question's marks.
-- **explanation**: 1–2 sentence summary for the teacher.
+1. ANSWER FROM THE EXCERPTS ONLY. Use their definitions, notation, symbols, figures, named examples and step orderings.
 
-Base answers on the provided source document text when available; otherwise use standard academic knowledge aligned with the question.
+2. NO OUTSIDE MATERIAL. Do not fill gaps from general knowledge.
+
+3. MARKS-PROPORTIONAL DEPTH. Scale model answers to the question's marks — concise for 1-2 marks, structured multi-point for 5+ marks.
+
+4. UNIVERSITY STANDARD. Model answers should read like a strong student's exam script or an examiner's reference — precise terminology, logical structure, partial-credit sub-points for longer answers.
+
+5. SELF-CONTAINED. Never mention "the document", "excerpt" or page numbers.
+
+## Per question type
+
+- MCQ: correctAnswer is A/B/C/D. modelAnswer states the full correct option and why the strongest distractor fails.
+- FillInTheBlanks: exact missing phrase; modelAnswer completes the sentence with brief justification.
+- ShortAnswer: 2-4 sentences covering every point needed for full marks.
+- MediumAnswer: one structured paragraph (~80-120 words) with clear logical flow.
+- LongAnswer: numbered sub-parts matching the question; include derivations/steps where the question asks for them.
+
+For every question return:
+- markingScheme: bullet breakdown totalling exactly the question's marks (part marks for each key step/point).
+- explanation: 1-2 sentences for the teacher citing the source content.
 
 Return ONLY valid JSON:
 {
@@ -63,57 +89,58 @@ Return ONLY valid JSON:
   ]
 }`;
 
-const estimateMaxTokens = (questions) => {
-  const perQuestion = questions.reduce((max, q) => {
-    const byType = {
-      MCQ: 400,
-      ShortAnswer: 600,
-      MediumAnswer: 900,
-      LongAnswer: 1400,
-      FillInTheBlanks: 350,
-    };
-    return Math.max(max, byType[q.type] || 700);
-  }, 500);
-  return Math.min(8192, perQuestion * questions.length + 400);
-};
+const estimateMaxTokens = (questions) =>
+  estimateGroqMaxTokens(questions.length, { perItem: 700, floor: 4096 });
 
-const buildUserPrompt = (approvedQuestions, extractedTexts, examInfo, startIndex = 0) => {
-  const sourceBlock = extractedTexts.length
-    ? truncateDocuments(extractedTexts, GROQ_GENERATION_INPUT_CHARS)
-        .map((t, i) => `=== SOURCE ${i + 1} ===\n${t}`)
-        .join('\n\n')
-    : '(No source documents — use question context and standard subject knowledge.)';
+/**
+ * Passages for one question. The evidence span recorded at generation time is
+ * the strongest signal available, so it leads the query and usually pulls back
+ * the exact passage the question was written from.
+ */
+const questionQuery = (q) => [
+  { text: q.sourceEvidence || '', weight: 4 },
+  { text: q.questionText || '', weight: 2 },
+  { text: (q.options || []).join(' '), weight: 1 },
+  { text: q.topicName || '', weight: 1 },
+];
 
-  const questionsBlock = approvedQuestions.map((q, i) => {
+const buildUserPrompt = (batchQuestions, corpus, examInfo, startIndex = 0) => {
+  const perQuestionChars = Math.max(
+    1_200,
+    Math.floor(EVIDENCE_CHARS_PER_BATCH / Math.max(batchQuestions.length, 1))
+  );
+
+  const questionsBlock = batchQuestions.map((q, i) => {
     const globalNum = startIndex + i + 1;
-    const opts = q.options?.length
-      ? `\n  Options: ${q.options.join(' | ')}`
-      : '';
+    const evidence = retrieve(corpus, questionQuery(q), {
+      maxChars: perQuestionChars,
+      maxChunks: 3,
+    });
+
+    const opts = q.options?.length ? `\n  Options: ${q.options.join(' | ')}` : '';
+    const excerpts = evidence.length
+      ? formatEvidenceBlock(evidence, `Q${globalNum}-E`)
+      : '(No excerpt could be retrieved for this question. Answer only as far as the question itself supports.)';
+
     return `Q${globalNum} [${q.type}, ${q.difficulty}, ${q.marks} marks, Topic: ${q.topicName}]
   Text: ${q.questionText}${opts}
-  Existing answer hint: ${q.correctAnswer || '(none)'}`;
-  }).join('\n\n');
+  Existing answer hint: ${q.correctAnswer || '(none)'}
+
+  SOURCE EXCERPTS FOR Q${globalNum}:
+${excerpts}`;
+  }).join('\n\n---\n\n');
 
   return `Exam: ${examInfo.examTitle || 'Exam'}
 Subject: ${examInfo.subject || 'General'}
 Total marks: ${examInfo.totalMarks || 100}
 
-Generate model answers for ALL ${approvedQuestions.length} approved questions below. Use questionNumber ${startIndex + 1} through ${startIndex + approvedQuestions.length}.
+Write the answer key for the ${batchQuestions.length} question(s) below, numbered ${startIndex + 1} through ${startIndex + batchQuestions.length}. Answer each one from the excerpts printed beneath it.
 
-${questionsBlock}
-
---- SOURCE DOCUMENTS ---
-${sourceBlock}`;
+${questionsBlock}`;
 };
 
 const parseAnswerResponse = (raw, batchQuestions, startIndex) => {
-  const cleaned = stripMarkdownFences(raw);
-  let parsed;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    throw new Error(`LLM answer response was not valid JSON: ${cleaned.slice(0, 300)}`);
-  }
+  const parsed = parseJsonFromLlm(raw);
 
   if (!Array.isArray(parsed.answers)) {
     throw new Error('LLM response missing "answers" array');
@@ -149,33 +176,61 @@ const parseAnswerResponse = (raw, batchQuestions, startIndex) => {
   return merged;
 };
 
-const callGroq = async (batchQuestions, extractedTexts, examInfo, startIndex) => {
+const callGroq = async (batchQuestions, corpus, examInfo, startIndex) => {
   const groq = getGroq();
-  const response = await groq.chat.completions.create({
-    model: 'llama-3.1-8b-instant',
-    temperature: 0.3,
-    max_tokens: estimateMaxTokens(batchQuestions),
-    response_format: { type: 'json_object' },
-    messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: buildUserPrompt(batchQuestions, extractedTexts, examInfo, startIndex) },
-    ],
-  });
+  const messages = [
+    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'user', content: buildUserPrompt(batchQuestions, corpus, examInfo, startIndex) },
+  ];
 
-  const raw = response.choices[0]?.message?.content;
-  if (!raw) throw new Error('Groq returned an empty response');
+  let lastErr;
+  let maxTokens = estimateMaxTokens(batchQuestions);
 
-  return {
-    answers: parseAnswerResponse(raw, batchQuestions, startIndex),
-    provider: 'groq-llama-3.1-8b',
-  };
+  for (let attempt = 0; attempt < 5; attempt++) {
+    try {
+      const response = await groqChatJsonCompletion(groq, {
+        model: GROQ_MODEL,
+        temperature: 0.25,
+        max_tokens: maxTokens,
+        messages,
+      });
+
+      const { content, finishReason, reasoningTokens } = extractChatContent(response);
+      if (!content) {
+        if (finishReason === 'length' || reasoningTokens > 0) {
+          maxTokens = Math.min(16384, maxTokens + 2048);
+        }
+        throw new Error('Groq returned an empty response');
+      }
+
+      return {
+        answers: parseAnswerResponse(content, batchQuestions, startIndex),
+        provider: `groq-${GROQ_MODEL}`,
+      };
+    } catch (err) {
+      lastErr = err;
+      if (isQuotaError(err) && attempt < 4) {
+        const delayMs = parseProviderRetryDelay(err.message, attempt);
+        console.warn(
+          `[answerGenerationService] Groq rate-limited, waiting ${Math.round(delayMs / 1000)}s…`
+        );
+        await sleep(delayMs);
+        continue;
+      }
+      if (attempt < 4 && (err.message || '').includes('empty')) {
+        await sleep(800 * (attempt + 1));
+        continue;
+      }
+      throw err;
+    }
+  }
+
+  throw lastErr;
 };
 
-const GEMINI_MODELS = ['gemini-2.0-flash-lite', 'gemini-2.5-flash'];
-
-const callGemini = async (batchQuestions, extractedTexts, examInfo, startIndex) => {
+const callGemini = async (batchQuestions, corpus, examInfo, startIndex) => {
   const ai = getGemini();
-  const fullPrompt = `${SYSTEM_PROMPT}\n\n---\n\n${buildUserPrompt(batchQuestions, extractedTexts, examInfo, startIndex)}`;
+  const fullPrompt = `${SYSTEM_PROMPT}\n\n---\n\n${buildUserPrompt(batchQuestions, corpus, examInfo, startIndex)}`;
 
   let lastErr;
   for (const modelName of GEMINI_MODELS) {
@@ -190,21 +245,25 @@ const callGemini = async (batchQuestions, extractedTexts, examInfo, startIndex) 
         };
       } catch (err) {
         lastErr = err;
+        if (isModelAccessError(err)) {
+          console.warn(`[answerGenerationService] ${modelName} unavailable, trying next model…`);
+          break;
+        }
         if (!isQuotaError(err)) throw err;
-        await sleep(parseGeminiRetryDelay(err.message, attempt));
+        await sleep(parseProviderRetryDelay(err.message, attempt));
       }
     }
   }
   throw lastErr;
 };
 
-const generateBatch = async (batchQuestions, extractedTexts, examInfo, startIndex) => {
+const generateBatch = async (batchQuestions, corpus, examInfo, startIndex) => {
   try {
-    return await callGroq(batchQuestions, extractedTexts, examInfo, startIndex);
+    return await callGroq(batchQuestions, corpus, examInfo, startIndex);
   } catch (groqErr) {
     console.warn(`[answerGenerationService] Groq batch failed (Q${startIndex + 1}+), trying Gemini…`, groqErr.message);
     try {
-      return await callGemini(batchQuestions, extractedTexts, examInfo, startIndex);
+      return await callGemini(batchQuestions, corpus, examInfo, startIndex);
     } catch (geminiErr) {
       throw new Error(
         `Answer batch failed.\n• Groq: ${groqErr.message}\n• Gemini: ${geminiErr.message}`
@@ -215,20 +274,31 @@ const generateBatch = async (batchQuestions, extractedTexts, examInfo, startInde
 
 /**
  * Generate model answers for approved questions via Groq → Gemini fallback, batched.
+ *
+ * @param {Array}  approvedQuestions
+ * @param {Array}  documents  [{ filename, pages, extractedText }] — or string[] of raw text
+ * @param {object} examInfo
  */
-const generateModelAnswers = async (approvedQuestions, extractedTexts, examInfo) => {
+const generateModelAnswers = async (approvedQuestions, documents, examInfo) => {
   if (!approvedQuestions.length) {
     return { answers: [], provider: 'none' };
   }
 
-  console.log(`[answerGenerationService] Generating model answers for ${approvedQuestions.length} questions…`);
+  const corpus = buildCorpus(normalizeDocuments(documents));
+  console.log(
+    `[answerGenerationService] Generating model answers for ${approvedQuestions.length} questions against ${corpus.size} indexed passage(s)…`
+  );
 
   const allAnswers = [];
-  let provider = 'groq-llama-3.1-8b';
+  let provider = `groq-${GROQ_MODEL}`;
 
   for (let i = 0; i < approvedQuestions.length; i += BATCH_SIZE) {
+    if (i > 0 && LLM_BATCH_PAUSE_MS > 0) {
+      await sleep(LLM_BATCH_PAUSE_MS);
+    }
+
     const batch = approvedQuestions.slice(i, i + BATCH_SIZE);
-    const result = await generateBatch(batch, extractedTexts, examInfo, i);
+    const result = await generateBatch(batch, corpus, examInfo, i);
     allAnswers.push(...result.answers);
     if (result.provider && !result.provider.startsWith('groq')) {
       provider = result.provider;

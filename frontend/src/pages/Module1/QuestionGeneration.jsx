@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Sparkles, Loader2, ArrowRight, ArrowLeft,
   AlertCircle, CheckCircle2, Cpu, BookOpen, Clock, Hash,
-  Layers
+  Layers, FileSearch
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import Navbar        from '../../components/layout/Navbar';
@@ -20,22 +20,26 @@ import { PAGE_BG } from '../../utils/theme';
 const M1_STEPS = ['Exam Details', 'Upload PDFs', 'Topics & Weightage', 'Generate Questions', 'Review Questions', 'Export'];
 
 const GENERATION_STAGES = [
-  'Reading source documents…',
-  'Analysing topic distribution…',
-  'Mapping difficulty requirements…',
-  'Balancing global question constraints…',
-  'Solving question-to-topic constraints…',
-  'Generating diverse questions…',
-  'Validating marks distribution…',
+  'Indexing your uploaded documents…',
+  'Matching passages to each topic…',
+  'Allocating questions across topics…',
+  'Writing questions from your source passages…',
+  'Checking each question against your PDFs…',
   'Finalising question paper…',
 ];
 
 const PROVIDER_LABELS = {
   'gpt-4o':                'GPT-4o',
-  'groq-llama-3.1-8b':     'Groq Llama 3.1',
   'gemini-2.5-flash':      'Gemini 2.5 Flash',
   'gemini-2.0-flash-lite': 'Gemini 2.0 Flash Lite',
 };
+
+/** A run generates in batches and can fall back partway, so the provider may be a '+'-joined list. */
+const formatProvider = (provider) =>
+  provider
+    .split('+')
+    .map((name) => PROVIDER_LABELS[name] || name.replace(/^groq-llama-/, 'Groq Llama ').replace(/^groq-/, 'Groq '))
+    .join(' + ');
 
 const QUESTION_TYPES = ['MCQ', 'ShortAnswer', 'MediumAnswer', 'LongAnswer', 'FillInTheBlanks'];
 const TYPE_LABELS     = { MCQ: 'MCQ', ShortAnswer: 'Short Answer', MediumAnswer: 'Medium Answer', LongAnswer: 'Long Answer', FillInTheBlanks: 'Fill in Blanks' };
@@ -50,6 +54,8 @@ export default function QuestionGeneration() {
   const questionsError              = useAppStore((s) => s.questionsError);
   const generatedQuestions          = useAppStore((s) => s.generatedQuestions);
   const generationProvider          = useAppStore((s) => s.generationProvider);
+  const groundedCount               = useAppStore((s) => s.groundedCount);
+  const generationWarnings          = useAppStore((s) => s.generationWarnings);
   const setExamInfo                 = useAppStore((s) => s.setExamInfo);
   const setQuestionType             = useAppStore((s) => s.setQuestionType);
   const generateQuestionsFromBackend = useAppStore((s) => s.generateQuestionsFromBackend);
@@ -274,15 +280,48 @@ export default function QuestionGeneration() {
                     <Sparkles className="h-4 w-4" />
                     <p className="text-sm font-semibold">VisionGrade AI</p>
                     <span className="ml-auto rounded-full bg-blue-100 px-2.5 py-0.5 text-[10px] font-bold text-blue-600">
-                      {generationProvider ? PROVIDER_LABELS[generationProvider] || generationProvider : 'GPT-4o → Gemini fallback'}
+                      {generationProvider ? formatProvider(generationProvider) : 'Groq → Gemini fallback'}
                     </span>
                   </div>
                   <p className="mt-3 text-xs leading-6 text-slate-600">
                     {done
                       ? `${generatedQuestions.length} questions generated successfully across ${selectedTopics.length} topic(s).`
-                      : `The LLM will intelligently assign the ${totalQuestionCount} required global questions to the ${selectedTopics.length} topics while respecting each topic's allocated marks.`}
+                      : `Each of the ${totalQuestionCount} questions is written from passages retrieved out of your uploaded PDFs, so the wording stays specific to your material rather than generic to the topic.`}
                   </p>
+
+                  {done && generatedQuestions.length > 0 && (
+                    <div className={`mt-3 flex items-start gap-2 rounded-xl border px-3 py-2 ${
+                      groundedCount === generatedQuestions.length
+                        ? 'border-emerald-200 bg-emerald-50'
+                        : 'border-amber-300 bg-amber-50'
+                    }`}>
+                      <FileSearch className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${
+                        groundedCount === generatedQuestions.length ? 'text-emerald-700' : 'text-amber-700'
+                      }`} />
+                      <p className={`text-[11px] leading-5 ${
+                        groundedCount === generatedQuestions.length ? 'text-emerald-800' : 'text-amber-800'
+                      }`}>
+                        {groundedCount} of {generatedQuestions.length} questions were traced back to an exact passage in your PDFs.
+                        {groundedCount < generatedQuestions.length &&
+                          ' Open Review Questions to see which ones could not be verified, and regenerate or edit them.'}
+                      </p>
+                    </div>
+                  )}
                 </motion.div>
+
+                {generationWarnings?.length > 0 && (
+                  <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4">
+                    <div className="flex items-center gap-2 text-amber-800">
+                      <AlertCircle className="h-4 w-4" />
+                      <p className="text-xs font-semibold">Blueprint notes</p>
+                    </div>
+                    <ul className="mt-2 space-y-1">
+                      {generationWarnings.map((warning, i) => (
+                        <li key={i} className="text-[11px] leading-5 text-amber-800">• {warning}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
 
                 {/* Progress during generation */}
                 <AnimatePresence>
