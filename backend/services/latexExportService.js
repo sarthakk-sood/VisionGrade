@@ -252,4 +252,98 @@ ${buildAllQuestions(questions, true)}
 `;
 };
 
-module.exports = { buildQuestionPaperLatex, buildAnswerKeyLatex };
+// ─── Evaluation report (Module 2 — per-student scored sheet) ─────────────────
+const MATCH_LEVEL_LABEL = { full: 'Full credit', partial: 'Half credit', none: 'No credit' };
+
+const buildReportHeader = (report, session) => {
+  const examTitle = esc(session?.examTitle || 'Examination');
+  const subject   = esc(session?.subject   || '');
+  const student    = esc(report.studentName || 'Unnamed Student');
+  const roll       = esc(report.rollNumber  || '—');
+  const total      = report.totalMarks    ?? 0;
+  const obtained   = report.marksObtained ?? 0;
+  const percentage = report.percentage    ?? 0;
+  const date       = new Date(report.updatedAt || report.createdAt || Date.now())
+    .toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' });
+
+  return `
+{\\centering
+  {\\LARGE\\bfseries ${examTitle}\\par}
+  \\vspace{0.3em}
+  {\\large\\textcolor{vggrey}{${subject}}\\par}
+  \\vspace{0.2em}
+  {\\normalsize\\bfseries\\textcolor{vgblue}{Evaluated Answer Sheet}\\par}
+  \\vspace{0.8em}
+  \\begin{tabularx}{\\textwidth}{|X|X|X|X|}
+    \\hline
+    \\textbf{Student:} ${student} &
+    \\textbf{Roll No:} ${roll} &
+    \\textbf{Score:} ${obtained}/${total} (${percentage}\\%) &
+    \\textbf{Date:} ${esc(date)} \\\\
+    \\hline
+  \\end{tabularx}
+  \\par
+}
+\\vspace{0.6em}
+\\noindent\\rule{\\textwidth}{0.8pt}
+\\vspace{0.4em}
+`;
+};
+
+/** One scored question — student's answer, marks, and the step-marking breakdown behind the score. */
+const buildScoredQuestion = (row) => {
+  const maxMarks = row.maxMarks ?? 0;
+  const awarded  = row.isOverridden ? (row.overriddenMarks ?? row.marksAwarded) : row.marksAwarded;
+  const marksStr = `${awarded}/${maxMarks} mark${maxMarks === 1 ? '' : 's'}`;
+
+  let block = `\\noindent\\textbf{Q${row.questionNumber}.}\\quad`;
+  block    += `{\\bfseries\\textcolor{vgblue}{${esc(marksStr)}}}`;
+  if (row.isOverridden) block += `{\\small\\textcolor{vggrey}{~(overridden by faculty)}}`;
+  block    += `\n\\par\n`;
+  block    += `\\noindent ${tex(row.questionText)}\n\\par\n`;
+
+  block += `\\vspace{0.3em}\n`;
+  block += `\\noindent{\\textcolor{vgblue}{\\textbf{Student's Answer:}}}\n\\par\n`;
+  block += `\\noindent ${row.studentAnswer ? tex(row.studentAnswer) : '\\textit{No answer found on the sheet for this question.}'}\n\\par\n`;
+
+  if (Array.isArray(row.criteriaBreakdown) && row.criteriaBreakdown.length) {
+    block += `\\vspace{0.3em}\n`;
+    block += `\\noindent{\\textcolor{vgblue}{\\textbf{Marking Scheme (Step Marking):}}}\n\\par\n`;
+    row.criteriaBreakdown.forEach((c) => {
+      const label = MATCH_LEVEL_LABEL[c.matchLevel] || 'No credit';
+      block += `\\noindent $\\bullet$~${tex(`${c.point} — ${c.marksAwarded}/${c.maxMarks} (${label})`)}\n\\par\n`;
+    });
+  } else if (row.modelAnswer) {
+    block += `\\vspace{0.3em}\n`;
+    block += `\\noindent{\\textcolor{vgblue}{\\textbf{Model Answer:}}}\n\\par\n`;
+    block += `\\noindent ${tex(row.modelAnswer)}\n\\par\n`;
+  }
+
+  if (row.feedback) {
+    block += `\\vspace{0.2em}\n`;
+    block += `{\\small\\textcolor{vggrey}{\\textbf{Feedback:}~${tex(row.feedback)}}}\n\\par\n`;
+  }
+
+  block += `\\vspace{0.5em}\n\\noindent\\textcolor{vggrey!30}{\\rule{\\textwidth}{0.2pt}}\n\\vspace{0.3em}\n`;
+  return block;
+};
+
+const buildEvaluationReportLatex = (report, session) => {
+  const rows = report.questionEvals || [];
+  const body = rows.length
+    ? rows.map(buildScoredQuestion).join('\n')
+    : '\\textit{No questions were evaluated for this sheet.}\n';
+
+  return `${PREAMBLE}
+\\begin{document}
+\\thispagestyle{firstpage}
+${buildReportHeader(report, session)}
+{\\bfseries\\large\\textcolor{vgblue}{Question-wise Evaluation}}
+\\vspace{0.4em}
+
+${body}
+\\end{document}
+`;
+};
+
+module.exports = { buildQuestionPaperLatex, buildAnswerKeyLatex, buildEvaluationReportLatex };

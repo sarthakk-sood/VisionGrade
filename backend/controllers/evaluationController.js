@@ -5,6 +5,9 @@ const EvaluationReport = require('../models/evaluation-report');
 const { evaluateAnswerSheet } = require('../services/evaluationService');
 const { fetchAnswerSheetMedia } = require('../services/documentService');
 const { LLM_BATCH_PAUSE_MS, sleep } = require('../utils/llmUtils');
+const { buildEvaluationReportLatex } = require('../services/latexExportService');
+const { compileLatexToPdf } = require('../services/latexCompileService');
+const { sanitizeFilename } = require('../utils/latexEscape');
 
 const loadOwnedSession = async (sessionId, teacherId, { requireQuestions = false } = {}) => {
   if (!mongoose.Types.ObjectId.isValid(sessionId)) {
@@ -318,10 +321,47 @@ const getOverview = async (req, res, next) => {
   }
 };
 
+/**
+ * GET /api/evaluation/reports/:reportId/export/pdf
+ * A per-student PDF: each question, the student's answer, marks awarded, and
+ * the step-marking breakdown that explains how the score was reached.
+ */
+const exportReportPdf = async (req, res, next) => {
+  try {
+    const { reportId } = req.params;
+    if (!mongoose.Types.ObjectId.isValid(reportId)) {
+      return res.status(400).json({ success: false, error: 'Invalid report ID' });
+    }
+
+    const report = await EvaluationReport.findById(reportId);
+    if (!report) {
+      return res.status(404).json({ success: false, error: 'Evaluation report not found' });
+    }
+    if (report.teacherId.toString() !== req.teacher._id.toString()) {
+      return res.status(403).json({ success: false, error: 'Not authorised' });
+    }
+
+    const session = await ExamSession.findById(report.sessionId);
+    const tex = buildEvaluationReportLatex(report, session);
+    const base = sanitizeFilename(`${report.rollNumber || report.studentName || 'student'}-evaluation`);
+    const pdf = await compileLatexToPdf(tex, base);
+    const filename = `${base}.pdf`;
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Length', pdf.length);
+    return res.status(200).send(pdf);
+  } catch (err) {
+    if (err.statusCode) return res.status(err.statusCode).json({ success: false, error: err.message });
+    next(err);
+  }
+};
+
 module.exports = {
   evaluateOneSheet,
   evaluateAllSheets,
   listReports,
   overrideMarks,
   getOverview,
+  exportReportPdf,
 };

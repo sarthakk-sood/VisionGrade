@@ -206,6 +206,7 @@ export default function EvaluationPage() {
                           <th className="px-4 py-3 font-semibold">Marks</th>
                           <th className="px-4 py-3 font-semibold">Score</th>
                           <th className="px-4 py-3 font-semibold">Status</th>
+                          <th className="px-4 py-3 font-semibold"></th>
                         </tr>
                       </thead>
                       <tbody>
@@ -222,6 +223,16 @@ export default function EvaluationPage() {
                             <td className="px-4 py-3">
                               <StatusBadge tone={r.status === 'approved' ? 'success' : 'info'}>{r.status}</StatusBadge>
                             </td>
+                            <td className="px-4 py-3 text-right">
+                              <a
+                                href={evaluationApi.exportReportPdfUrl(r.id)}
+                                onClick={(e) => e.stopPropagation()}
+                                title="Download evaluated sheet PDF"
+                                className="inline-flex items-center rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                              >
+                                <Download className="h-3.5 w-3.5" />
+                              </a>
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -232,10 +243,21 @@ export default function EvaluationPage() {
 
               {selectedReport && (
                 <Card className="xl:w-[380px] shrink-0">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500">Question marks</p>
-                  <h3 className="mt-1 text-sm font-bold text-slate-900">
-                    {selectedReport.studentName || selectedReport.rollNumber}
-                  </h3>
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500">Question marks</p>
+                      <h3 className="mt-1 text-sm font-bold text-slate-900">
+                        {selectedReport.studentName || selectedReport.rollNumber}
+                      </h3>
+                    </div>
+                    <a
+                      href={evaluationApi.exportReportPdfUrl(selectedReport.id)}
+                      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-600 transition hover:border-slate-300 hover:bg-slate-50"
+                    >
+                      <Download className="h-3.5 w-3.5" />
+                      PDF
+                    </a>
+                  </div>
                   <div className="mt-4 max-h-[420px] space-y-3 overflow-y-auto pr-1">
                     {(selectedReport.questionEvals || []).map((row) => (
                       <div key={row.questionNumber} className="rounded-xl border border-slate-200 p-3">

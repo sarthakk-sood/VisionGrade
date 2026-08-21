@@ -220,4 +220,10 @@ export const evaluationApi = {
   /** One row per session — evaluated/pending sheet counts + average score, for the dashboard. */
   overview: () =>
     api.get('/evaluation/overview').then((r) => r.data),
+
+  /** Per-student evaluated-sheet PDF — question, student answer, marks + step-marking breakdown. */
+  exportReportPdfUrl: (reportId) => {
+    const token = localStorage.getItem('vg_token') || '';
+    return `${API_BASE}/evaluation/reports/${reportId}/export/pdf?token=${encodeURIComponent(token)}`;
+  },
 };
