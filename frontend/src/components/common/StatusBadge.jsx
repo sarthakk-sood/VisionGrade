@@ -1,21 +1,21 @@
 import { motion } from 'framer-motion';
 
 const styles = {
-  success: 'bg-emerald-500/15 text-emerald-300 ring-1 ring-emerald-400/25',
-  warning: 'bg-amber-500/15  text-amber-300  ring-1 ring-amber-400/25',
-  danger:  'bg-rose-500/15   text-rose-300   ring-1 ring-rose-400/25',
-  info:    'bg-blue-500/15   text-blue-300   ring-1 ring-blue-400/25',
-  neutral: 'bg-white/[0.08]  text-slate-300  ring-1 ring-white/10',
-  purple:  'bg-purple-500/15 text-purple-300 ring-1 ring-purple-400/25',
+  success: 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200',
+  warning: 'bg-amber-50  text-amber-700  ring-1 ring-amber-200',
+  danger:  'bg-rose-50   text-rose-700   ring-1 ring-rose-200',
+  info:    'bg-blue-50   text-blue-700   ring-1 ring-blue-200',
+  neutral: 'bg-slate-100 text-slate-600 ring-1 ring-slate-200',
+  purple:  'bg-purple-50 text-purple-700 ring-1 ring-purple-200',
 };
 
 const dotStyles = {
-  success: 'bg-emerald-400',
-  warning: 'bg-amber-400',
-  danger:  'bg-rose-400',
-  info:    'bg-blue-400',
+  success: 'bg-emerald-500',
+  warning: 'bg-amber-500',
+  danger:  'bg-rose-500',
+  info:    'bg-blue-500',
   neutral: 'bg-slate-400',
-  purple:  'bg-purple-400',
+  purple:  'bg-purple-500',
 };
 
 export default function StatusBadge({ children, tone = 'neutral', dot = false, pulse = false, className = '' }) {

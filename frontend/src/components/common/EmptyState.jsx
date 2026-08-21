@@ -9,13 +9,13 @@ export default function EmptyState({ icon: Icon, title, description, action }) {
       className="flex flex-col items-center justify-center px-6 py-16 text-center"
     >
       {Icon && (
-        <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-blue-400/20 bg-blue-500/10 text-blue-300">
+        <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-2xl border border-blue-200 bg-blue-50 text-blue-600">
           <Icon className="h-7 w-7" />
         </div>
       )}
-      <h3 className="text-base font-semibold text-white">{title}</h3>
+      <h3 className="text-base font-semibold text-slate-900">{title}</h3>
       {description && (
-        <p className="mt-2 max-w-xs text-sm leading-6 text-slate-400">{description}</p>
+        <p className="mt-2 max-w-xs text-sm leading-6 text-slate-600">{description}</p>
       )}
       {action && <div className="mt-6">{action}</div>}
     </motion.div>

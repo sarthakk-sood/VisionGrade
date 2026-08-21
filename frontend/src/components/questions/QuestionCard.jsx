@@ -11,7 +11,7 @@ export default function QuestionCard({ question, onApprove, onRegenerate, onDele
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <StatusBadge tone={question.approved ? 'success' : 'warning'}>{question.type}</StatusBadge>
-            <span className="text-sm text-slate-400">{question.marks} marks</span>
+            <span className="text-sm text-slate-500">{question.marks} marks</span>
           </div>
           <div className="flex items-center gap-2">
             <Button variant="ghost" size="sm" icon={<RefreshCw className="h-4 w-4" />} onClick={() => onRegenerate?.(question.id)}>
@@ -29,7 +29,7 @@ export default function QuestionCard({ question, onApprove, onRegenerate, onDele
           value={question.text}
           onChange={(event) => onChange?.(question.id, event.target.value)}
           rows={4}
-          className="w-full rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-500 focus:border-blue-400/50"
+          className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none placeholder:text-slate-500 focus:border-blue-400/50"
         />
       </Card>
     </motion.div>

@@ -1,5 +1,6 @@
-import { motion } from 'framer-motion';
-import { User, ArrowRight, ArrowLeft, AlertTriangle } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { AlertTriangle, ArrowLeft, ArrowRight, FileText, Loader2 } from 'lucide-react';
 import Navbar        from '../../components/layout/Navbar';
 import Sidebar       from '../../components/layout/Sidebar';
 import PageContainer from '../../components/layout/PageContainer';
@@ -7,189 +8,233 @@ import Stepper       from '../../components/common/Stepper';
 import Card          from '../../components/common/Card';
 import Button        from '../../components/common/Button';
 import StatusBadge   from '../../components/common/StatusBadge';
-import ProgressBar   from '../../components/common/ProgressBar';
+import EmptyState    from '../../components/common/EmptyState';
 import { useAppStore } from '../../store/useAppStore';
+import { evaluationApi } from '../../services/api';
+import { PAGE_BG } from '../../utils/theme';
+import { markingCriteriaLines } from '../../utils/markingCriteria';
 
-const BG = 'bg-[radial-gradient(circle_at_top,rgba(37,99,235,0.12),transparent_22%),linear-gradient(180deg,#020617_0%,#071226_55%,#0f172a_100%)]';
-const M2_STEPS = ['Select Exam', 'Upload Sheets', 'Processing', 'Review Flags', 'Results'];
+const M2_STEPS = ['Select Exam', 'Upload Sheets', 'Review', 'Results'];
 
-const CONFIDENCE_CLS = {
-  High:   'bg-emerald-500/20 text-emerald-300',
-  Medium: 'bg-amber-500/20  text-amber-300',
-  Low:    'bg-rose-500/20   text-rose-300',
-};
-
-const REASON_COUNTS = [
-  { reason: 'Bad Handwriting',           count: 3 },
-  { reason: 'OCR Confidence Low',        count: 2 },
-  { reason: 'Answer Partially Visible',  count: 1 },
-  { reason: 'Question Mapping Uncertain', count: 2 },
-];
-
-const STUDENT_DATA = {
-  'CS2026-021': { totalMarks: 100, score: 73 },
-  'CS2026-052': { totalMarks: 100, score: 65 },
-  'CS2026-014': { totalMarks: 100, score: 86 },
+const isPdfSheet = (sheet) => {
+  const mime = String(sheet?.mimeType || '').toLowerCase();
+  const name = String(sheet?.originalFilename || sheet?.fileUrl || '').split('?')[0];
+  return mime === 'application/pdf' || /\.pdf$/i.test(name);
 };
 
 export default function AnswerMapping() {
-  const getFlagsForSession = useAppStore((s) => s.getFlagsForSession);
-  const flags = getFlagsForSession('ES-2026-001');
+  const navigate = useNavigate();
+  const selectedSessionId = useAppStore((s) => s.selectedSessionId);
+  const examSessions = useAppStore((s) => s.examSessions);
+  const answerSheets = useAppStore((s) => s.answerSheets);
+  const loadAnswerSheets = useAppStore((s) => s.loadAnswerSheets);
+  const loadSessionsFromBackend = useAppStore((s) => s.loadSessionsFromBackend);
+  const fetchSessionById = useAppStore((s) => s.fetchSessionById);
+  const setCurrentAnswerSheet = useAppStore((s) => s.setCurrentAnswerSheet);
+  const currentAnswerSheetId = useAppStore((s) => s.currentAnswerSheetId);
 
-  // Group by student
-  const groupedByStudent = flags.reduce((acc, flag) => {
-    const key = flag.rollNo;
-    if (!acc[key]) acc[key] = { studentName: flag.studentName, rollNo: flag.rollNo, flags: [] };
-    acc[key].flags.push(flag);
-    return acc;
-  }, {});
+  const session = examSessions.find((s) => s.id === selectedSessionId);
+  const [evaluatingId, setEvaluatingId] = useState(null);
+  const [error, setError] = useState('');
 
-  const studentGroups = Object.values(groupedByStudent);
-  const totalFlags    = flags.length;
-  const lowCount      = flags.filter((f) => f.confidence === 'Low').length;
-  const studentsAffected = studentGroups.length;
+  useEffect(() => {
+    if (!examSessions.length) loadSessionsFromBackend();
+  }, [examSessions.length, loadSessionsFromBackend]);
+
+  useEffect(() => {
+    if (selectedSessionId) {
+      loadAnswerSheets(selectedSessionId);
+      fetchSessionById(selectedSessionId);
+    }
+  }, [selectedSessionId, loadAnswerSheets, fetchSessionById]);
+
+  const selectedSheet = useMemo(
+    () => answerSheets.find((s) => s.id === currentAnswerSheetId) || answerSheets[0] || null,
+    [answerSheets, currentAnswerSheetId]
+  );
+
+  const questions = session?.sessionQuestions || [];
+  const evaluatedCount = answerSheets.filter((s) => s.status === 'evaluated').length;
+
+  const handleEvaluate = async (sheetId) => {
+    setError('');
+    setEvaluatingId(sheetId);
+    try {
+      await evaluationApi.evaluateSheet(sheetId);
+      await loadAnswerSheets(selectedSessionId);
+      navigate('/module2/evaluate');
+    } catch (err) {
+      setError(err?.response?.data?.error || err.message || 'Evaluation failed');
+    } finally {
+      setEvaluatingId(null);
+    }
+  };
+
+  if (!selectedSessionId) {
+    return (
+      <div className={PAGE_BG}>
+        <Navbar />
+        <PageContainer subtitle="Module 2 / Step 3" title="Review Sheets">
+          <div className="flex flex-col gap-6 lg:flex-row">
+            <Sidebar />
+            <div className="flex-1 min-w-0">
+              <Stepper steps={M2_STEPS} currentStep={3} />
+              <EmptyState
+                icon={FileText}
+                title="Select an exam first"
+                description="Upload answer sheets against a finalized Module 1 session."
+                action={<Button to="/module2/upload">Go to Upload</Button>}
+              />
+            </div>
+          </div>
+        </PageContainer>
+      </div>
+    );
+  }
 
   return (
-    <div className={`min-h-screen ${BG}`}>
+    <div className={PAGE_BG}>
       <Navbar />
-      <PageContainer subtitle="Module 2 / Step 4" title="Review Flagged Responses">
+      <PageContainer subtitle="Module 2 / Step 3" title="Review Sheets">
         <div className="flex flex-col gap-6 lg:flex-row">
           <Sidebar />
-
           <div className="flex-1 min-w-0">
-            <Stepper steps={M2_STEPS} currentStep={4} />
+            <Stepper steps={M2_STEPS} currentStep={3} />
 
-            {/* ── Summary bar ── */}
             <div className="mb-5 grid grid-cols-3 gap-4">
               {[
-                { label: 'Total Flags',       value: totalFlags,       border: 'border-rose-400/20',   bg: 'bg-rose-500/[0.08]'  },
-                { label: 'Low Confidence',    value: lowCount,         border: 'border-amber-400/20',  bg: 'bg-amber-500/[0.08]' },
-                { label: 'Students Affected', value: studentsAffected, border: 'border-blue-400/20',   bg: 'bg-blue-500/[0.08]'  },
+                { label: 'Sheets uploaded', value: answerSheets.length },
+                { label: 'Already scored', value: evaluatedCount },
+                { label: 'Questions in key', value: questions.length },
               ].map((stat) => (
-                <div key={stat.label} className={`rounded-2xl border ${stat.border} ${stat.bg} p-4 text-center`}>
-                  <p className="text-3xl font-black text-white">{stat.value}</p>
-                  <p className="mt-1 text-xs text-slate-400">{stat.label}</p>
+                <div key={stat.label} className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-center">
+                  <p className="text-3xl font-black text-slate-900">{stat.value}</p>
+                  <p className="mt-1 text-xs text-slate-500">{stat.label}</p>
                 </div>
               ))}
             </div>
 
-            <div className="grid gap-5 xl:grid-cols-[1.3fr_0.7fr]">
-
-              {/* ── Left: Flags grouped by student ── */}
-              <div className="space-y-5">
-                {studentGroups.map((group, gi) => {
-                  const sd = STUDENT_DATA[group.rollNo] ?? { totalMarks: 100, score: 0 };
-                  return (
-                    <motion.div
-                      key={group.rollNo}
-                      initial={{ opacity: 0, y: 8 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ delay: gi * 0.07 }}
-                    >
-                      <Card>
-                        {/* Student header */}
-                        <div className="mb-4 flex items-center gap-3">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-500/15 text-blue-200 text-sm font-black">
-                            {group.studentName[0]}
-                          </div>
-                          <div className="min-w-0">
-                            <p className="font-bold text-white">{group.studentName}</p>
-                            <p className="text-xs text-slate-500">
-                              {group.rollNo} · Score: {sd.score}/{sd.totalMarks}
-                            </p>
-                          </div>
-                          <StatusBadge tone="warning" className="ml-auto shrink-0">Flagged</StatusBadge>
-                        </div>
-
-                        {/* Flag cards */}
-                        <div className="space-y-3">
-                          {group.flags.map((flag) => (
-                            <div key={flag.id} className="rounded-2xl border border-white/[0.06] bg-white/[0.03] p-4">
-                              <div className="flex items-start justify-between gap-3">
-                                <div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-sm font-bold text-white">{flag.questionNo}</span>
-                                    <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${CONFIDENCE_CLS[flag.confidence] ?? ''}`}>
-                                      {flag.confidence}
-                                    </span>
-                                  </div>
-                                  <p className="mt-1 text-xs font-medium text-slate-300">{flag.reason}</p>
-                                </div>
-                                <div className="shrink-0 text-right">
-                                  <p className="text-2xl font-black text-white">{flag.confidenceScore}%</p>
-                                  <p className="text-[9px] text-slate-600">confidence</p>
-                                </div>
-                              </div>
-                              <p className="mt-3 border-t border-white/[0.05] pt-3 text-xs leading-5 text-slate-400">
-                                {flag.ocrText}
-                              </p>
-                              <div className="mt-3 flex flex-wrap gap-2">
-                                <button className="rounded-lg border border-white/[0.08] bg-white/[0.05] px-3 py-1.5 text-[10px] font-semibold text-slate-300 transition hover:bg-white/[0.10]">
-                                  View Original
-                                </button>
-                                <button className="rounded-lg border border-emerald-400/25 bg-emerald-500/10 px-3 py-1.5 text-[10px] font-semibold text-emerald-300 transition hover:bg-emerald-500/15">
-                                  Accept OCR
-                                </button>
-                                <button className="rounded-lg border border-blue-400/25 bg-blue-500/10 px-3 py-1.5 text-[10px] font-semibold text-blue-300 transition hover:bg-blue-500/15">
-                                  Override Score
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      </Card>
-                    </motion.div>
-                  );
-                })}
+            {error && (
+              <div className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs text-rose-700">
+                {error}
               </div>
+            )}
 
-              {/* ── Right: Reason breakdown ── */}
+            {evaluatingId && (
+              <div className="mb-4 flex items-center gap-3 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-xs text-blue-700">
+                <Loader2 className="h-4 w-4 shrink-0 animate-spin" />
+                Scoring this student's sheet with the vision LLM — this can take up to a couple of minutes, please wait…
+              </div>
+            )}
+
+            <div className="grid gap-5 xl:grid-cols-[0.9fr_1.1fr]">
+              <Card>
+                <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500">Students</p>
+                <h3 className="mt-1 text-sm font-bold text-slate-900">Uploaded answer sheets</h3>
+                <div className="mt-4 space-y-2">
+                  {answerSheets.length === 0 && (
+                    <p className="text-xs text-slate-500">No sheets yet. Upload from the previous step.</p>
+                  )}
+                  {answerSheets.map((sheet) => (
+                    <button
+                      key={sheet.id}
+                      type="button"
+                      onClick={() => setCurrentAnswerSheet(sheet.id)}
+                      className={`w-full rounded-xl border px-3 py-3 text-left ${
+                        selectedSheet?.id === sheet.id
+                          ? 'border-blue-300 bg-blue-50'
+                          : 'border-slate-200 bg-white hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate text-sm font-semibold text-slate-900">
+                          {sheet.studentName || sheet.rollNumber}
+                        </p>
+                        <StatusBadge tone={sheet.status === 'evaluated' ? 'success' : 'info'}>
+                          {sheet.status}
+                        </StatusBadge>
+                      </div>
+                      <p className="mt-1 text-[11px] text-slate-500">{sheet.rollNumber}</p>
+                    </button>
+                  ))}
+                </div>
+              </Card>
+
               <div className="space-y-5">
-                <Card className="sticky top-24">
-                  <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-blue-400/70">Analysis</p>
-                  <h3 className="mt-1 text-base font-bold text-white">Flag Reason Breakdown</h3>
+                <Card>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.3em] text-slate-500">Sheet photo</p>
+                      <h3 className="mt-1 text-sm font-bold text-slate-900">
+                        {selectedSheet ? (selectedSheet.studentName || selectedSheet.rollNumber) : 'Select a student'}
+                      </h3>
+                    </div>
+                    {selectedSheet?.fileUrl && (
+                      <a href={selectedSheet.fileUrl} target="_blank" rel="noreferrer" className="text-xs font-semibold text-blue-600">
+                        Open original
+                      </a>
+                    )}
+                  </div>
+                  {!selectedSheet?.fileUrl ? (
+                    <p className="mt-4 text-xs text-slate-500">No file stored for this sheet.</p>
+                  ) : isPdfSheet(selectedSheet) ? (
+                    <iframe
+                      src={selectedSheet.fileUrl}
+                      title="Answer sheet"
+                      className="mt-3 h-96 w-full rounded-xl border border-slate-200 bg-slate-50"
+                    />
+                  ) : (
+                    <img
+                      src={selectedSheet.fileUrl}
+                      alt="Answer sheet"
+                      className="mt-3 max-h-96 w-full rounded-xl border border-slate-200 bg-slate-100 object-contain"
+                    />
+                  )}
+                </Card>
 
-                  <div className="mt-5 space-y-4">
-                    {REASON_COUNTS.map((item, i) => {
-                      const pct = Math.round((item.count / totalFlags) * 100);
-                      const tones = ['rose', 'amber', 'blue', 'purple'];
-                      return (
-                        <div key={item.reason}>
-                          <div className="mb-1 flex justify-between text-xs">
-                            <span className="text-slate-400">{item.reason}</span>
-                            <span className="font-bold text-white">{item.count}</span>
-                          </div>
-                          <ProgressBar value={pct} showValue={false} tone={tones[i % tones.length]} height="h-1" />
+                <Card>
+                  <div className="mb-3 flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-blue-600" />
+                    <h3 className="text-sm font-bold text-slate-900">Answer key to mark against</h3>
+                  </div>
+                  {questions.length === 0 ? (
+                    <p className="text-xs text-slate-500">
+                      This session has no stored questions. Open it from Sessions to load the answer key.
+                    </p>
+                  ) : (
+                    <div className="space-y-3 max-h-72 overflow-y-auto pr-1">
+                      {questions.map((q) => (
+                        <div key={q.id || q.questionNumber} className="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                          <p className="text-[10px] font-bold uppercase text-slate-500">
+                            Q{q.questionNumber} · {q.marks} marks · {q.type}
+                          </p>
+                          <p className="mt-1 text-xs text-slate-800">{q.questionText}</p>
+                          {markingCriteriaLines(q).length > 0 && (
+                            <ul className="mt-2 space-y-0.5 text-[11px] text-slate-500">
+                              {markingCriteriaLines(q).map((line) => (
+                                <li key={line}>{line}</li>
+                              ))}
+                            </ul>
+                          )}
                         </div>
-                      );
-                    })}
-                  </div>
-
-                  <div className="mt-5 space-y-3 border-t border-white/[0.06] pt-4">
-                    <div className="flex justify-between text-xs">
-                      <span className="text-slate-500">Total flags reviewed</span>
-                      <span className="font-bold text-white">0 / {totalFlags}</span>
+                      ))}
                     </div>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-slate-500">Accepted OCR</span>
-                      <span className="font-bold text-white">0</span>
-                    </div>
-                    <div className="flex justify-between text-xs">
-                      <span className="text-slate-500">Overridden</span>
-                      <span className="font-bold text-white">0</span>
-                    </div>
-                  </div>
+                  )}
                 </Card>
               </div>
             </div>
 
-            {/* ── Actions ── */}
             <div className="mt-5 flex items-center justify-between">
-              <Button variant="ghost" to="/module2/ocr" icon={<ArrowLeft className="h-4 w-4" />}>
+              <Button variant="ghost" to="/module2/upload" icon={<ArrowLeft className="h-4 w-4" />}>
                 Back
               </Button>
-              <Button to="/module2/evaluate" icon={<ArrowRight className="h-4 w-4" />}>
-                Proceed to Results
+              <Button
+                onClick={() => selectedSheet && handleEvaluate(selectedSheet.id)}
+                disabled={!selectedSheet || Boolean(evaluatingId) || questions.length === 0}
+                loading={Boolean(evaluatingId)}
+                icon={<ArrowRight className="h-4 w-4" />}
+              >
+                {evaluatingId ? 'Scoring…' : 'Score this student'}
               </Button>
             </div>
           </div>

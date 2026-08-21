@@ -6,12 +6,12 @@ export default function TopicWeightCard({ topics = [] }) {
 
   return (
     <Card>
-      <p className="text-xs uppercase tracking-[0.3em] text-blue-300/80">Distribution</p>
-      <h3 className="mt-2 text-xl font-bold text-white">Topic weights</h3>
+      <p className="text-xs uppercase tracking-[0.3em] text-blue-600">Distribution</p>
+      <h3 className="mt-2 text-xl font-bold text-slate-900">Topic weights</h3>
       <div className="mt-5 space-y-4">
         {topics.map((topic) => (
           <div key={topic.id}>
-            <div className="mb-2 flex items-center justify-between text-sm text-slate-300">
+            <div className="mb-2 flex items-center justify-between text-sm text-slate-600">
               <span>{topic.title}</span>
               <span>{topic.weight}%</span>
             </div>

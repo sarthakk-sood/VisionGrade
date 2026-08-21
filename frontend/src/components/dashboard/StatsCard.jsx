@@ -43,10 +43,10 @@ export default function StatsCard({ label, value, delta, icon: Icon, index = 0 }
         <div className="relative flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-xs font-medium text-slate-500 truncate">{label}</p>
-            <h3 className="mt-2 text-3xl font-black tracking-tight text-white">
+            <h3 className="mt-2 text-3xl font-black tracking-tight text-slate-900">
               <AnimatedNumber target={value} />
             </h3>
-            <p className={`mt-1.5 flex items-center gap-1 text-xs font-medium ${isNegative ? 'text-amber-300' : 'text-emerald-300'}`}>
+            <p className={`mt-1.5 flex items-center gap-1 text-xs font-medium ${isNegative ? 'text-amber-700' : 'text-emerald-700'}`}>
               {isNegative
                 ? <ArrowDownRight className="h-3.5 w-3.5" />
                 : <ArrowUpRight   className="h-3.5 w-3.5" />}
@@ -55,7 +55,7 @@ export default function StatsCard({ label, value, delta, icon: Icon, index = 0 }
           </div>
 
           {Icon && (
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-500/15 text-blue-300 ring-1 ring-blue-400/20">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-blue-50 text-blue-600 ring-1 ring-blue-200">
               <Icon className="h-5 w-5" />
             </div>
           )}

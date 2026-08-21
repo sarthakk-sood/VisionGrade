@@ -1,363 +1,232 @@
 import { create } from 'zustand';
+import { uploadApi, topicApi, questionApi, sessionApi, ocrApi, evaluationApi } from '../services/api';
+import { displaySessionStatus } from '../utils/sessionHelpers';
 
-// ─── Exam Sessions ────────────────────────────────────────────────────────────
-const examSessions = [
-  {
-    id: 'ES-2026-001',
-    examName: 'DBMS Mid Semester Examination',
-    subject: 'Database Management Systems',
-    subjectCode: 'CS401',
-    academicYear: '2025–26',
-    semester: 'IV Semester',
-    session: 'Mid Semester 2026',
-    totalMarks: 100,
-    questionCount: 17,
-    questionType: 'Mixed',
-    difficulty: 'Mixed',
-    dateCreated: '2026-05-12',
-    dateGenerated: '2026-05-12',
-    status: 'Evaluated',
-    topics: [
-      { id: 1, name: 'Database Normalization',       weightage: 25, marks: 25, questionCount: 4 },
-      { id: 2, name: 'Indexing & Query Optimization', weightage: 20, marks: 20, questionCount: 3 },
-      { id: 3, name: 'Transaction Management',        weightage: 20, marks: 20, questionCount: 3 },
-      { id: 4, name: 'Concurrency Control',           weightage: 15, marks: 15, questionCount: 3 },
-      { id: 5, name: 'Recovery Techniques',           weightage: 10, marks: 10, questionCount: 2 },
-      { id: 6, name: 'Distributed Databases',         weightage: 10, marks: 10, questionCount: 2 },
-    ],
-    studentsEvaluated: 32,
-    flaggedResponses: 7,
-    avgScore: 76.4,
-    evaluationDate: '2026-05-28',
-  },
-  {
-    id: 'ES-2026-002',
-    examName: 'Operating Systems End Semester',
-    subject: 'Operating Systems',
-    subjectCode: 'CS302',
-    academicYear: '2025–26',
-    semester: 'III Semester',
-    session: 'End Semester 2026',
-    totalMarks: 80,
-    questionCount: 14,
-    questionType: 'Theory',
-    difficulty: 'Hard',
-    dateCreated: '2026-04-20',
-    dateGenerated: '2026-04-20',
-    status: 'Generated',
-    topics: [
-      { id: 1, name: 'Process Management',  weightage: 30, marks: 24, questionCount: 4 },
-      { id: 2, name: 'Memory Management',   weightage: 25, marks: 20, questionCount: 3 },
-      { id: 3, name: 'File Systems',        weightage: 20, marks: 16, questionCount: 3 },
-      { id: 4, name: 'Deadlock Handling',   weightage: 15, marks: 12, questionCount: 2 },
-      { id: 5, name: 'CPU Scheduling',      weightage: 10, marks:  8, questionCount: 2 },
-    ],
-    studentsEvaluated: 0,
-    flaggedResponses: 0,
-    avgScore: 0,
-    evaluationDate: null,
-  },
-  {
-    id: 'ES-2026-003',
-    examName: 'AI & Machine Learning Quiz 03',
-    subject: 'Artificial Intelligence',
-    subjectCode: 'CS501',
-    academicYear: '2025–26',
-    semester: 'V Semester',
-    session: 'Quiz 3 — 2026',
-    totalMarks: 40,
-    questionCount: 20,
-    questionType: 'MCQ',
-    difficulty: 'Medium',
-    dateCreated: '2026-05-30',
-    dateGenerated: '2026-05-30',
-    status: 'Exported',
-    topics: [
-      { id: 1, name: 'Neural Networks',            weightage: 40, marks: 16, questionCount: 8 },
-      { id: 2, name: 'Search Algorithms',           weightage: 35, marks: 14, questionCount: 7 },
-      { id: 3, name: 'Knowledge Representation',    weightage: 25, marks: 10, questionCount: 5 },
-    ],
-    studentsEvaluated: 45,
-    flaggedResponses: 3,
-    avgScore: 82.1,
-    evaluationDate: '2026-05-31',
-  },
-  {
-    id: 'ES-2026-004',
-    examName: 'Computer Networks Lab Practical',
-    subject: 'Computer Networks',
-    subjectCode: 'CS403',
-    academicYear: '2025–26',
-    semester: 'IV Semester',
-    session: 'Lab Practical 2026',
-    totalMarks: 50,
-    questionCount: 10,
-    questionType: 'Theory',
-    difficulty: 'Easy',
-    dateCreated: '2026-05-15',
-    dateGenerated: '2026-05-15',
-    status: 'Draft',
-    topics: [
-      { id: 1, name: 'TCP/IP Protocol Suite', weightage: 40, marks: 20, questionCount: 4 },
-      { id: 2, name: 'Network Security',       weightage: 30, marks: 15, questionCount: 3 },
-      { id: 3, name: 'Routing Algorithms',     weightage: 30, marks: 15, questionCount: 3 },
-    ],
-    studentsEvaluated: 0,
-    flaggedResponses: 0,
-    avgScore: 0,
-    evaluationDate: null,
-  },
-  {
-    id: 'ES-2026-005',
-    examName: 'Software Engineering Internal Test',
-    subject: 'Software Engineering',
-    subjectCode: 'CS404',
-    academicYear: '2025–26',
-    semester: 'IV Semester',
-    session: 'Internal Test 2026',
-    totalMarks: 60,
-    questionCount: 12,
-    questionType: 'Mixed',
-    difficulty: 'Medium',
-    dateCreated: '2026-06-01',
-    dateGenerated: '2026-06-01',
-    status: 'Evaluating',
-    topics: [
-      { id: 1, name: 'SDLC Models',       weightage: 30, marks: 18, questionCount: 4 },
-      { id: 2, name: 'Agile & Scrum',     weightage: 25, marks: 15, questionCount: 3 },
-      { id: 3, name: 'Testing Strategies', weightage: 25, marks: 15, questionCount: 3 },
-      { id: 4, name: 'Design Patterns',   weightage: 20, marks: 12, questionCount: 2 },
-    ],
-    studentsEvaluated: 18,
-    flaggedResponses: 5,
-    avgScore: 71.3,
-    evaluationDate: '2026-06-02',
-  },
-];
-
-// ─── Student Evaluations ──────────────────────────────────────────────────────
-const studentEvaluations = [
-  {
-    id: 1, sessionId: 'ES-2026-001',
-    studentName: 'Aarav Sharma', rollNo: 'CS2026-014',
-    marksObtained: 86, totalMarks: 100, percentage: 86, flagCount: 1, status: 'Evaluated',
-    questionWiseMarks: [
-      { qNo: 'Q1', question: 'Explain 1NF, 2NF, and 3NF with examples',            maxMarks: 15, obtained: 14, flagged: false },
-      { qNo: 'Q2', question: 'Clustered vs non-clustered indexing',                 maxMarks: 10, obtained:  9, flagged: false },
-      { qNo: 'Q3', question: 'Transaction states and ACID properties',              maxMarks: 15, obtained:  9, flagged: true  },
-      { qNo: 'Q4', question: 'Two-phase locking protocol',                          maxMarks: 10, obtained:  9, flagged: false },
-      { qNo: 'Q5', question: 'Compare B-tree and Hash indexing',                    maxMarks: 10, obtained:  9, flagged: false },
-      { qNo: 'Q6', question: 'Distributed database architecture',                   maxMarks: 20, obtained: 18, flagged: false },
-      { qNo: 'Q7', question: 'MCQ Section — 5 × 4 marks',                          maxMarks: 20, obtained: 18, flagged: false },
-    ],
-    strengths: ['Correct ACID explanation', 'Strong diagramming', 'Well-structured answers'],
-    weaknesses: ['Minor formatting issues in Q3', 'Handwriting unclear near diagram'],
-    feedback: 'Excellent conceptual clarity with only small presentation gaps. Strong understanding of normalization and indexing.',
-  },
-  {
-    id: 2, sessionId: 'ES-2026-001',
-    studentName: 'Meera Iyer', rollNo: 'CS2026-021',
-    marksObtained: 73, totalMarks: 100, percentage: 73, flagCount: 3, status: 'Flagged',
-    questionWiseMarks: [
-      { qNo: 'Q1', question: 'Explain 1NF, 2NF, and 3NF with examples',            maxMarks: 15, obtained: 12, flagged: false },
-      { qNo: 'Q2', question: 'Clustered vs non-clustered indexing',                 maxMarks: 10, obtained:  5, flagged: true  },
-      { qNo: 'Q3', question: 'Transaction states and ACID properties',              maxMarks: 15, obtained: 10, flagged: false },
-      { qNo: 'Q4', question: 'Two-phase locking protocol',                          maxMarks: 10, obtained:  8, flagged: false },
-      { qNo: 'Q5', question: 'Compare B-tree and Hash indexing',                    maxMarks: 10, obtained:  6, flagged: true  },
-      { qNo: 'Q6', question: 'Distributed database architecture',                   maxMarks: 20, obtained: 16, flagged: false },
-      { qNo: 'Q7', question: 'MCQ Section — 5 × 4 marks',                          maxMarks: 20, obtained: 16, flagged: true  },
-    ],
-    strengths: ['Clear transaction definition', 'Good normalization examples'],
-    weaknesses: ['Incomplete answer for Q2 — cut off at page edge', 'OCR flags on Q5 and Q7'],
-    feedback: 'Solid attempt; partial credit applied for complete sub-parts. OCR review recommended for flagged sections.',
-  },
-  {
-    id: 3, sessionId: 'ES-2026-001',
-    studentName: 'Kabir Singh', rollNo: 'CS2026-033',
-    marksObtained: 91, totalMarks: 100, percentage: 91, flagCount: 1, status: 'Evaluated',
-    questionWiseMarks: [
-      { qNo: 'Q1', question: 'Explain 1NF, 2NF, and 3NF with examples',            maxMarks: 15, obtained: 15, flagged: false },
-      { qNo: 'Q2', question: 'Clustered vs non-clustered indexing',                 maxMarks: 10, obtained: 10, flagged: false },
-      { qNo: 'Q3', question: 'Transaction states and ACID properties',              maxMarks: 15, obtained: 12, flagged: true  },
-      { qNo: 'Q4', question: 'Two-phase locking protocol',                          maxMarks: 10, obtained:  9, flagged: false },
-      { qNo: 'Q5', question: 'Compare B-tree and Hash indexing',                    maxMarks: 10, obtained:  9, flagged: false },
-      { qNo: 'Q6', question: 'Distributed database architecture',                   maxMarks: 20, obtained: 18, flagged: false },
-      { qNo: 'Q7', question: 'MCQ Section — 5 × 4 marks',                          maxMarks: 20, obtained: 18, flagged: false },
-    ],
-    strengths: ['Precise indexing analysis', 'Strong technical structure', 'Excellent diagrams'],
-    weaknesses: ['Slight OCR ambiguity in Q3 diagram section'],
-    feedback: 'High quality work with strong technical reasoning. Top performer in batch.',
-  },
-  {
-    id: 4, sessionId: 'ES-2026-001',
-    studentName: 'Priya Nair', rollNo: 'CS2026-045',
-    marksObtained: 78, totalMarks: 100, percentage: 78, flagCount: 0, status: 'Evaluated',
-    questionWiseMarks: [
-      { qNo: 'Q1', question: 'Explain 1NF, 2NF, and 3NF with examples',            maxMarks: 15, obtained: 12, flagged: false },
-      { qNo: 'Q2', question: 'Clustered vs non-clustered indexing',                 maxMarks: 10, obtained:  7, flagged: false },
-      { qNo: 'Q3', question: 'Transaction states and ACID properties',              maxMarks: 15, obtained: 11, flagged: false },
-      { qNo: 'Q4', question: 'Two-phase locking protocol',                          maxMarks: 10, obtained:  8, flagged: false },
-      { qNo: 'Q5', question: 'Compare B-tree and Hash indexing',                    maxMarks: 10, obtained:  8, flagged: false },
-      { qNo: 'Q6', question: 'Distributed database architecture',                   maxMarks: 20, obtained: 16, flagged: false },
-      { qNo: 'Q7', question: 'MCQ Section — 5 × 4 marks',                          maxMarks: 20, obtained: 16, flagged: false },
-    ],
-    strengths: ['Consistent performance', 'Good conceptual coverage'],
-    weaknesses: ['Could improve depth on indexing strategies'],
-    feedback: 'Good overall performance with room for improvement in indexing concepts.',
-  },
-  {
-    id: 5, sessionId: 'ES-2026-001',
-    studentName: 'Rahul Verma', rollNo: 'CS2026-052',
-    marksObtained: 65, totalMarks: 100, percentage: 65, flagCount: 4, status: 'Flagged',
-    questionWiseMarks: [
-      { qNo: 'Q1', question: 'Explain 1NF, 2NF, and 3NF with examples',            maxMarks: 15, obtained:  8, flagged: true  },
-      { qNo: 'Q2', question: 'Clustered vs non-clustered indexing',                 maxMarks: 10, obtained:  7, flagged: false },
-      { qNo: 'Q3', question: 'Transaction states and ACID properties',              maxMarks: 15, obtained: 10, flagged: true  },
-      { qNo: 'Q4', question: 'Two-phase locking protocol',                          maxMarks: 10, obtained:  5, flagged: true  },
-      { qNo: 'Q5', question: 'Compare B-tree and Hash indexing',                    maxMarks: 10, obtained:  5, flagged: true  },
-      { qNo: 'Q6', question: 'Distributed database architecture',                   maxMarks: 20, obtained: 15, flagged: false },
-      { qNo: 'Q7', question: 'MCQ Section — 5 × 4 marks',                          maxMarks: 20, obtained: 15, flagged: false },
-    ],
-    strengths: ['Basic concepts understood'],
-    weaknesses: ['Poor handwriting causing OCR issues', 'Incomplete answers in multiple sections'],
-    feedback: 'Partial understanding shown; several answers require manual review due to OCR confidence issues.',
-  },
-];
-
-// ─── Flagged Responses ────────────────────────────────────────────────────────
-const flaggedResponsesData = [
-  { id: 1, sessionId: 'ES-2026-001', studentName: 'Aarav Sharma', rollNo: 'CS2026-014', questionNo: 'Q3', confidenceScore: 61, reason: 'Bad Handwriting',           confidence: 'Low',    ocrText: 'The answer mentions locking but handwriting is partially unclear near the diagram area.' },
-  { id: 2, sessionId: 'ES-2026-001', studentName: 'Meera Iyer',   rollNo: 'CS2026-021', questionNo: 'Q2', confidenceScore: 72, reason: 'Answer Partially Visible',   confidence: 'Medium', ocrText: 'Normalization reduces redundancy and improves integrity. Clustered index... [text cut off at page edge]' },
-  { id: 3, sessionId: 'ES-2026-001', studentName: 'Meera Iyer',   rollNo: 'CS2026-021', questionNo: 'Q5', confidenceScore: 58, reason: 'OCR Confidence Low',         confidence: 'Low',    ocrText: 'The candidate describes B-tree indexing but the comparison with hash index is unclear due to smudging.' },
-  { id: 4, sessionId: 'ES-2026-001', studentName: 'Meera Iyer',   rollNo: 'CS2026-021', questionNo: 'Q7', confidenceScore: 74, reason: 'Question Mapping Uncertain', confidence: 'Medium', ocrText: 'MCQ responses partially overwritten; optical mark recognition uncertain for questions 3 and 4.' },
-  { id: 5, sessionId: 'ES-2026-001', studentName: 'Rahul Verma',  rollNo: 'CS2026-052', questionNo: 'Q1', confidenceScore: 55, reason: 'Bad Handwriting',           confidence: 'Low',    ocrText: 'Primary key constraints definition is partially legible; normalization steps are unclear.' },
-  { id: 6, sessionId: 'ES-2026-001', studentName: 'Rahul Verma',  rollNo: 'CS2026-052', questionNo: 'Q3', confidenceScore: 45, reason: 'Question Mapping Uncertain', confidence: 'Low',    ocrText: 'Response appears to address a different topic than the transaction states question mapped by OCR.' },
-  { id: 7, sessionId: 'ES-2026-001', studentName: 'Rahul Verma',  rollNo: 'CS2026-052', questionNo: 'Q4', confidenceScore: 52, reason: 'OCR Confidence Low',         confidence: 'Low',    ocrText: 'Two-phase locking explanation is partially visible; remainder of text is smudged and illegible.' },
-  { id: 8, sessionId: 'ES-2026-001', studentName: 'Rahul Verma',  rollNo: 'CS2026-052', questionNo: 'Q5', confidenceScore: 63, reason: 'Bad Handwriting',           confidence: 'Medium', ocrText: 'Hash indexing uses... [unclear text]... compared to B-tree which allows range queries.' },
-  { id: 9, sessionId: 'ES-2026-005', studentName: 'Divya Krishnan', rollNo: 'CS2026-011', questionNo: 'Q2', confidenceScore: 69, reason: 'Answer Partially Visible', confidence: 'Medium', ocrText: 'Agile sprint planning process described but answer is cut off before conclusion.' },
-  { id: 10, sessionId: 'ES-2026-005', studentName: 'Anil Mehta',  rollNo: 'CS2026-027', questionNo: 'Q4', confidenceScore: 48, reason: 'OCR Confidence Low',        confidence: 'Low',    ocrText: 'Design pattern classification partially legible; singleton and factory descriptions are unclear.' },
-];
-
-// ─── Dashboard Stats ──────────────────────────────────────────────────────────
-const dashboardStats = [
-  { label: 'Total Exam Sessions',     value: '5',  delta: '+2 this month'  },
-  { label: 'Question Papers Generated', value: '5', delta: 'All sessions'  },
-  { label: 'Answer Sheets Evaluated', value: '95', delta: '+45 this week'  },
-  { label: 'Flagged Responses',       value: '15', delta: '7 need review'  },
-];
-
-// ─── Activity Timeline ────────────────────────────────────────────────────────
-const activityTimeline = [
-  { id: 1, time: '2h ago',  title: 'Evaluation completed',    detail: 'DBMS Mid Semester — 32 students evaluated, 7 flagged.',           type: 'evaluation' },
-  { id: 2, time: '5h ago',  title: 'Question paper exported', detail: 'AI & ML Quiz 03 exported as PDF + DOCX package.',               type: 'export'     },
-  { id: 3, time: '1d ago',  title: 'OCR review completed',    detail: 'SE Internal Test — low confidence regions flagged for review.', type: 'ocr'        },
-  { id: 4, time: '2d ago',  title: 'New session created',     detail: 'Software Engineering Internal Test — 12 questions generated.',  type: 'session'    },
-  { id: 5, time: '3d ago',  title: 'Blueprint finalized',     detail: 'Computer Networks — 10 questions, 50 marks configured.',        type: 'blueprint'  },
-];
-
-// ─── Topics ───────────────────────────────────────────────────────────────────
-const topics = [
-  { id: 1, title: 'Database Normalization',       weight: 25, marks: 25, questionCount: 4, status: 'Approved'     },
-  { id: 2, title: 'Indexing & Query Optimization', weight: 20, marks: 20, questionCount: 3, status: 'Approved'     },
-  { id: 3, title: 'Transaction Management',        weight: 20, marks: 20, questionCount: 3, status: 'Needs Review' },
-  { id: 4, title: 'Concurrency Control',           weight: 15, marks: 15, questionCount: 3, status: 'Approved'     },
-  { id: 5, title: 'Recovery Techniques',           weight: 10, marks: 10, questionCount: 2, status: 'Needs Review' },
-  { id: 6, title: 'Distributed Databases',         weight: 10, marks: 10, questionCount: 2, status: 'Approved'     },
-];
-
-// ─── Blueprint ────────────────────────────────────────────────────────────────
-const blueprint = {
+const defaultBlueprint = {
   totalMarks: 100,
-  sections: [
-    { id: 1, name: 'Part A — MCQ',         marks: 20, questions: 10, difficulty: 'Easy'   },
-    { id: 2, name: 'Part B — Short Answer', marks: 40, questions: 5,  difficulty: 'Medium' },
-    { id: 3, name: 'Part C — Long Answer',  marks: 40, questions: 2,  difficulty: 'Hard'   },
-  ],
-  difficultySplit: { easy: 20, medium: 40, hard: 40 },
+  sections: [],
+  difficultySplit: { easy: 0, medium: 0, hard: 0 },
 };
 
-// ─── Questions ────────────────────────────────────────────────────────────────
-const questions = [
-  { id: 1, type: 'MCQ',   text: 'Which normal form eliminates transitive functional dependencies?',                                                   topic: 'Database Normalization',       marks:  2, difficulty: 'Easy',   approved: true  },
-  { id: 2, type: 'Short', text: 'Define indexing and explain the difference between clustered and non-clustered indexes.',                            topic: 'Indexing & Query Optimization', marks:  8, difficulty: 'Medium', approved: true  },
-  { id: 3, type: 'Long',  text: 'Describe all transaction states with a state diagram and explain the ACID properties with real-world examples.',     topic: 'Transaction Management',        marks: 15, difficulty: 'Hard',   approved: false },
-  { id: 4, type: 'MCQ',   text: 'Which of the following is NOT a property of a well-normalized relational schema?',                                   topic: 'Database Normalization',       marks:  2, difficulty: 'Easy',   approved: true  },
-  { id: 5, type: 'Long',  text: 'Analyze and design a distributed database schema for a national university admissions system. Justify your fragmentation and replication strategy.', topic: 'Distributed Databases', marks: 20, difficulty: 'Hard', approved: false },
-  { id: 6, type: 'Short', text: 'Explain the two-phase locking (2PL) protocol and its variants used to ensure serializability.',                      topic: 'Concurrency Control',           marks: 10, difficulty: 'Medium', approved: true  },
-  { id: 7, type: 'MCQ',   text: 'In B+ tree indexing, what is the time complexity of a search operation?',                                            topic: 'Indexing & Query Optimization', marks:  2, difficulty: 'Easy',   approved: true  },
-];
-
-// ─── OCR Results ─────────────────────────────────────────────────────────────
-const ocrResults = [
-  { id: 1, question: 'Q1', confidence: 97, status: 'High',   text: 'The candidate defines primary key and foreign key accurately with correct SQL syntax.' },
-  { id: 2, question: 'Q2', confidence: 82, status: 'Medium', text: 'Normalization reduces redundancy and improves referential integrity across related tables.' },
-  { id: 3, question: 'Q3', confidence: 61, status: 'Low',    text: 'The answer mentions locking but the handwriting is partially unclear near the transaction diagram.' },
-  { id: 4, question: 'Q4', confidence: 74, status: 'Medium', text: 'The response compares B-tree and hash indexing with reasonable accuracy.' },
-  { id: 5, question: 'Q5', confidence: 91, status: 'High',   text: 'Two-phase locking protocol is correctly described with grow and shrink phases.' },
-];
-
-// ─── Evaluations ─────────────────────────────────────────────────────────────
-const evaluations = [
-  { id: 1, student: 'Aarav Sharma', rollNo: 'CS2026-014', score: 86, status: 'Completed',   strengths: ['Correct ACID explanation', 'Strong diagramming'], weaknesses: ['Minor formatting issues'],         feedback: 'Excellent conceptual clarity with only small presentation gaps.' },
-  { id: 2, student: 'Meera Iyer',   rollNo: 'CS2026-021', score: 73, status: 'Needs review', strengths: ['Clear transaction definition', 'Good examples'],  weaknesses: ['Incomplete normalization answer'],  feedback: 'Solid attempt; partial credit applied for complete sub-parts.' },
-  { id: 3, student: 'Kabir Singh',  rollNo: 'CS2026-033', score: 91, status: 'Completed',   strengths: ['Precise indexing analysis', 'Strong structure'],  weaknesses: ['Slight OCR ambiguity in Q3'],      feedback: 'High quality work with strong technical reasoning.' },
-];
-
-// ─── Reports ──────────────────────────────────────────────────────────────────
-const reports = [
-  { id: 1, title: 'Final Marksheet DOCX',    format: 'DOCX', size: '2.4 MB', downloadLabel: 'Download DOCX' },
-  { id: 2, title: 'Evaluation Summary PDF',  format: 'PDF',  size: '1.8 MB', downloadLabel: 'Download PDF'  },
-  { id: 3, title: 'Batch Export ZIP',        format: 'ZIP',  size: '8.9 MB', downloadLabel: 'Download ZIP'  },
-];
-
-// ─── Uploaded Files ───────────────────────────────────────────────────────────
-const uploadedFiles = [
-  { id: 1, name: 'DBMS_Syllabus_2026.pdf',        size: '4.2 MB', pages: 24, uploadTime: '10:23 AM', progress: 100 },
-  { id: 2, name: 'Previous_Year_Questions.pdf',    size: '2.8 MB', pages: 18, uploadTime: '10:24 AM', progress: 100 },
-  { id: 3, name: 'Topic_Coverage_Guide.pdf',       size: '1.6 MB', pages: 12, uploadTime: '10:25 AM', progress: 100 },
-];
-
 // ─── Store ────────────────────────────────────────────────────────────────────
-export const useAppStore = create((set, get) => ({
-  user: {
-    name: 'Dr. Ananya Rao',
-    role: 'Faculty Evaluator',
-    email: 'ananya.rao@visiongrade.edu',
-    institution: 'NIT Trichy',
-  },
-  session: {
-    id: 'VG-2026-MIDSEM-07',
-    course: 'Database Management Systems',
-    batch: 'B.Tech CSE 2026',
-    activeModule: 'module1',
-    progress: 68,
-  },
+function loadStoredUser() {
+  try {
+    const raw = localStorage.getItem('vg_user');
+    if (!raw) return null;
+    const teacher = JSON.parse(raw);
+    return {
+      name: teacher.name || 'Faculty User',
+      email: teacher.email || '',
+      role: 'Faculty Evaluator',
+      department: teacher.department || '',
+      institution: teacher.institution || 'Thapar Institute of Engineering & Technology',
+    };
+  } catch {
+    localStorage.removeItem('vg_user');
+    return null;
+  }
+}
 
-  // Data
-  examSessions,
-  studentEvaluations,
-  flaggedResponsesData,
-  selectedSessionId: 'ES-2026-001',
-  dashboardStats,
-  activityTimeline,
-  topics,
-  blueprint,
-  questions,
-  ocrResults,
-  evaluations,
-  reports,
-  uploadedFiles,
+const defaultUser = loadStoredUser() || {
+  name: 'Faculty User',
+  role: 'Faculty Evaluator',
+  email: '',
+  institution: 'Thapar Institute of Engineering & Technology',
+};
+
+function loadWorkflowState() {
+  try {
+    const projectId = localStorage.getItem('vg_projectId');
+    const step = parseInt(localStorage.getItem('vg_m1_step') || '0', 10);
+    const examInfoRaw = localStorage.getItem('vg_exam_info');
+    const examInfo = examInfoRaw ? JSON.parse(examInfoRaw) : null;
+    return {
+      projectId: projectId || null,
+      m1CompletedStep: Number.isFinite(step) ? step : 0,
+      examInfo,
+    };
+  } catch {
+    return { projectId: null, m1CompletedStep: 0, examInfo: null };
+  }
+}
+
+const workflowState = loadWorkflowState();
+
+const mapApiQuestion = (q, idx) => ({
+  id:          q._id?.toString() || q.id?.toString() || String(idx + 1),
+  type:        q.type,
+  text:        q.questionText || q.text || '',
+  topic:       q.topicName || q.topic || '',
+  marks:       q.marks ?? 0,
+  difficulty:  q.difficulty || 'Medium',
+  approved:    q.approved ?? false,
+  options:     q.options,
+  answer:      q.correctAnswer || q.answer || '',
+  explanation: q.explanation || '',
+  modelAnswer: q.modelAnswer || '',
+  markingScheme: q.markingScheme || '',
+  markingCriteria: Array.isArray(q.markingCriteria) ? q.markingCriteria : [],
+  // Provenance — the PDF passage this question was written from.
+  sourceEvidence: q.sourceEvidence || '',
+  sourceFile:     q.sourceFile || '',
+  sourcePage:     q.sourcePage ?? null,
+  grounded:       q.grounded ?? false,
+});
+
+const mapApiSession = (s, questions = null) => {
+  const qs = questions ?? s.questions ?? null;
+  return {
+    id:            s.id || s._id,
+    projectId:     s.projectId,
+    examName:      s.examTitle || 'Untitled Exam',
+    subject:       s.subject || '',
+    totalMarks:    s.totalMarks,
+    questionCount: s.questionCount,
+    dateCreated:   s.finalizedAt || s.createdAt || null,
+    status:        displaySessionStatus(s.status),
+    rawStatus:     s.status || 'finalized',
+    // Filled in from /evaluation/overview once sessions are loaded (see loadSessionsFromBackend).
+    studentsEvaluated: 0,
+    pendingSheets:     0,
+    avgScore: 0,
+    evaluationDate: null,
+    answerProvider: s.answerProvider || null,
+    sessionQuestions:  qs,
+    hasModelAnswers: Boolean(qs?.length) || Boolean(s.hasAnswerKey) || Boolean(s.answerProvider),
+  };
+};
+
+const persistWorkflow = (state) => {
+  if (state.projectId) localStorage.setItem('vg_projectId', state.projectId);
+  else localStorage.removeItem('vg_projectId');
+  localStorage.setItem('vg_m1_step', String(state.m1CompletedStep ?? 0));
+  if (state.examInfo) localStorage.setItem('vg_exam_info', JSON.stringify(state.examInfo));
+};
+
+export const useAppStore = create((set, get) => ({
+  user: defaultUser,
+
+  examSessions: [],
+  studentEvaluations: [],
+  flaggedResponsesData: [],
+  selectedSessionId: localStorage.getItem('vg_session_id') || null,
+  sessionsLoading: false,
+
+  topics: [],
+  blueprint: defaultBlueprint,
+  questions: [],
+  ocrResults: [],
+  evaluations: [],
+  reports: [],
+  uploadedFiles: [],
 
   loadingStates: { uploading: false, generating: false, ocrReview: false, evaluating: false },
+
+  // ─── Module 1 Workflow — step gate ────────────────────────────────────────
+  // 0 = nothing done yet, 1 = ExamDetails done, 2 = PDFs uploaded + topics detected,
+  // 3 = topics saved, 4 = questions generated, 5 = questions reviewed, 6 = exported
+  m1CompletedStep: workflowState.m1CompletedStep,
+
+  // ─── Project / Topic API state ─────────────────────────────────────────────
+  projectId:       workflowState.projectId,
+  topicsLoading:   false,
+  topicsSaved:     false,
+  topicsError:     null,
+  detectedSubject: null,
+  llmProvider:     null,
+
+  // ─── Exam Info (teacher fills on QuestionGeneration page) ─────────────────────
+  examInfo: workflowState.examInfo || {
+    examTitle:       '',
+    subject:         '',
+    totalMarks:      100,
+    durationMinutes: 90,
+    instructions:    [],
+    questionTypes: {
+      MCQ:             { count: 0, marks: 1 },
+      ShortAnswer:     { count: 0, marks: 2 },
+      MediumAnswer:    { count: 0, marks: 3 },
+      LongAnswer:      { count: 0, marks: 5 },
+      FillInTheBlanks: { count: 0, marks: 1 },
+    },
+  },
+
+  // ─── Generated questions ───────────────────────────────────────────────────
+  generatedQuestions: [],
+  questionsLoading:   false,
+  questionsError:     null,
+  generationProvider: null,
+
+  // How many questions had their source passage verified in the uploaded PDFs,
+  // plus any allocation warnings the backend reported.
+  groundedCount:       0,
+  generationWarnings:  [],
 
   // ─── Actions ───────────────────────────────────────────────────────────────
   setLoadingState: (key, value) =>
     set((s) => ({ loadingStates: { ...s.loadingStates, [key]: value } })),
 
+  /** Mark step N as completed (only advances forward, never goes back). */
+  completeM1Step: (step) =>
+    set((s) => {
+      const m1CompletedStep = Math.max(s.m1CompletedStep, step);
+      persistWorkflow({ projectId: s.projectId, m1CompletedStep, examInfo: s.examInfo });
+      return { m1CompletedStep };
+    }),
+
+  /** Resets the whole Module 1 workflow so teacher can start a new exam. */
+  resetM1Workflow: () => {
+    localStorage.removeItem('vg_projectId');
+    localStorage.removeItem('vg_m1_step');
+    localStorage.removeItem('vg_exam_info');
+    set({
+      m1CompletedStep: 0,
+      projectId:        null,
+      topics:           [],
+      detectedSubject:  null,
+      llmProvider:      null,
+      generatedQuestions: [],
+      questions:        [],
+      questionsError:   null,
+      topicsError:      null,
+      uploadedFiles:    [],
+      groundedCount:      0,
+      generationWarnings: [],
+      examInfo: {
+        examTitle: '', subject: '', totalMarks: 100, durationMinutes: 90,
+        instructions: [],
+        questionTypes: {
+          MCQ:             { count: 0, marks: 1 },
+          ShortAnswer:     { count: 0, marks: 2 },
+          MediumAnswer:    { count: 0, marks: 3 },
+          LongAnswer:      { count: 0, marks: 5 },
+          FillInTheBlanks: { count: 0, marks: 1 },
+        },
+      },
+    });
+  },
+
   setUser:    (user)    => set({ user }),
+
+  logout: () => {
+    localStorage.removeItem('vg_token');
+    localStorage.removeItem('vg_user');
+    set({
+      user: {
+        name: 'Faculty User',
+        role: 'Faculty Evaluator',
+        email: '',
+        institution: 'Thapar Institute of Engineering & Technology',
+      },
+    });
+  },
   setSession: (session) => set({ session }),
 
-  selectSession: (id) => set({ selectedSessionId: id }),
+  selectSession: (id) => {
+    if (id) localStorage.setItem('vg_session_id', id);
+    else localStorage.removeItem('vg_session_id');
+    set({ selectedSessionId: id });
+  },
 
   createExamSession: (newSession) =>
     set((s) => ({
@@ -401,17 +270,276 @@ export const useAppStore = create((set, get) => ({
   removeQuestion: (id) =>
     set((s) => ({ questions: s.questions.filter((q) => q.id !== id) })),
 
-  regenerateQuestion: (id) =>
-    set((s) => ({
-      questions: s.questions.map((q) =>
-        q.id === id ? { ...q, approved: false, text: `${q.text} (regenerated)` } : q,
-      ),
-    })),
+  questionsActionError: null,
+  questionsActionLoading: false,
+  savingQuestionId: null,
 
-  approveQuestion: (id) =>
-    set((s) => ({
-      questions: s.questions.map((q) => (q.id === id ? { ...q, approved: true } : q)),
-    })),
+  syncQuestionsFromApi: (apiQuestions) =>
+    set({
+      questions: (apiQuestions || []).map(mapApiQuestion),
+      generatedQuestions: apiQuestions || [],
+    }),
+
+  loadQuestionsFromBackend: async (projectId) => {
+    if (!projectId) return false;
+    try {
+      const data = await questionApi.list(projectId);
+      set({
+        questions: (data.questions || []).map(mapApiQuestion),
+        generatedQuestions: data.questions || [],
+        generationProvider: data.generationProvider,
+        questionsActionError: null,
+      });
+      if (data.examInfo) {
+        set((s) => ({ examInfo: { ...s.examInfo, ...data.examInfo } }));
+      }
+      return true;
+    } catch (err) {
+      set({ questionsActionError: err?.response?.data?.error || err.message });
+      return false;
+    }
+  },
+
+  approveQuestion: async (id) => {
+    const { projectId } = get();
+    if (!projectId) {
+      set((s) => ({
+        questions: s.questions.map((q) => (q.id === id ? { ...q, approved: true } : q)),
+      }));
+      return;
+    }
+    set({ savingQuestionId: id, questionsActionError: null });
+    try {
+      const data = await questionApi.update(projectId, id, { approved: true });
+      set({
+        questions: (data.questions || []).map(mapApiQuestion),
+        generatedQuestions: data.questions || [],
+        savingQuestionId: null,
+      });
+    } catch (err) {
+      set({
+        questionsActionError: err?.response?.data?.error || err.message,
+        savingQuestionId: null,
+      });
+    }
+  },
+
+  unapproveQuestion: async (id) => {
+    const { projectId } = get();
+    if (!projectId) {
+      set((s) => ({
+        questions: s.questions.map((q) => (q.id === id ? { ...q, approved: false } : q)),
+      }));
+      return;
+    }
+    set({ savingQuestionId: id, questionsActionError: null });
+    try {
+      const data = await questionApi.update(projectId, id, { approved: false });
+      set({
+        questions: (data.questions || []).map(mapApiQuestion),
+        generatedQuestions: data.questions || [],
+        savingQuestionId: null,
+      });
+    } catch (err) {
+      set({
+        questionsActionError: err?.response?.data?.error || err.message,
+        savingQuestionId: null,
+      });
+    }
+  },
+
+  approveAllQuestions: async () => {
+    const { projectId, questions } = get();
+    if (!projectId || !questions.length) return false;
+    set({ questionsActionLoading: true, questionsActionError: null });
+    try {
+      const data = await questionApi.approveSelection(
+        projectId,
+        questions.map((q) => q.id),
+      );
+      set({
+        questions: (data.questions || []).map(mapApiQuestion),
+        generatedQuestions: data.questions || [],
+        questionsActionLoading: false,
+      });
+      return true;
+    } catch (err) {
+      set({
+        questionsActionError: err?.response?.data?.error || err.message,
+        questionsActionLoading: false,
+      });
+      return false;
+    }
+  },
+
+  saveApprovedSelection: async (questionIds) => {
+    const { projectId } = get();
+    if (!projectId || !questionIds?.length) return false;
+    set({ questionsActionLoading: true, questionsActionError: null });
+    try {
+      const data = await questionApi.approveSelection(projectId, questionIds);
+      set({
+        questions: (data.questions || []).map(mapApiQuestion),
+        generatedQuestions: data.questions || [],
+        questionsActionLoading: false,
+      });
+      return true;
+    } catch (err) {
+      set({
+        questionsActionError: err?.response?.data?.error || err.message,
+        questionsActionLoading: false,
+      });
+      return false;
+    }
+  },
+
+  saveQuestionEdit: async (id, payload) => {
+    const { projectId } = get();
+    if (!projectId) return false;
+    set({ savingQuestionId: id, questionsActionError: null });
+    try {
+      const data = await questionApi.update(projectId, id, payload);
+      set({
+        questions: (data.questions || []).map(mapApiQuestion),
+        generatedQuestions: data.questions || [],
+        savingQuestionId: null,
+      });
+      return true;
+    } catch (err) {
+      set({
+        questionsActionError: err?.response?.data?.error || err.message,
+        savingQuestionId: null,
+      });
+      return false;
+    }
+  },
+
+  addQuestionToBackend: async (payload) => {
+    const { projectId } = get();
+    if (!projectId) return false;
+    set({ questionsActionLoading: true, questionsActionError: null });
+    try {
+      const data = await questionApi.add(projectId, payload);
+      set({
+        questions: (data.questions || []).map(mapApiQuestion),
+        generatedQuestions: data.questions || [],
+        questionsActionLoading: false,
+      });
+      return true;
+    } catch (err) {
+      set({
+        questionsActionError: err?.response?.data?.error || err.message,
+        questionsActionLoading: false,
+      });
+      return false;
+    }
+  },
+
+  deleteQuestionFromBackend: async (id) => {
+    const { projectId } = get();
+    if (!projectId) {
+      set((s) => ({ questions: s.questions.filter((q) => q.id !== id) }));
+      return true;
+    }
+    set({ savingQuestionId: id, questionsActionError: null });
+    try {
+      const data = await questionApi.delete(projectId, id);
+      set({
+        questions: (data.questions || []).map(mapApiQuestion),
+        generatedQuestions: data.questions || [],
+        savingQuestionId: null,
+      });
+      return true;
+    } catch (err) {
+      set({
+        questionsActionError: err?.response?.data?.error || err.message,
+        savingQuestionId: null,
+      });
+      return false;
+    }
+  },
+
+  duplicateQuestion: async (id) => {
+    const q = get().questions.find((item) => item.id === id);
+    if (!q) return false;
+    return get().addQuestionToBackend({
+      questionText: q.text,
+      type: q.type,
+      difficulty: q.difficulty,
+      marks: q.marks,
+      topicName: q.topic,
+      options: q.options || undefined,
+      correctAnswer: q.answer || '',
+      explanation: q.explanation || '',
+    });
+  },
+
+  // Tracks which question IDs are currently being regenerated (for per-button spinner)
+  regeneratingIds: new Set(),
+
+  regenerateQuestion: async (questionId) => {
+    const s = get();
+    const projectId = s.projectId;
+    const question  = s.questions.find((q) => q.id === questionId);
+
+    // Mark as regenerating
+    set((prev) => {
+      const ids = new Set(prev.regeneratingIds);
+      ids.add(questionId);
+      return { regeneratingIds: ids };
+    });
+
+    try {
+      // Fall back gracefully if there's no real projectId (demo mode)
+      if (!projectId) {
+        await new Promise((r) => setTimeout(r, 1200)); // simulate delay
+        set((prev) => ({
+          questions: prev.questions.map((q) =>
+            q.id === questionId
+              ? { ...q, approved: false, text: `[Regenerated] ${q.text}` }
+              : q,
+          ),
+        }));
+        return;
+      }
+
+      const data = await questionApi.regenerateSingle(projectId, questionId, {
+        questionType: question?.type,
+        topicName:    question?.topic,
+        marks:        question?.marks,
+        difficulty:   question?.difficulty,
+      });
+
+      const newQ = data.question;
+      set((prev) => ({
+        questions: prev.questions.map((q) =>
+          q.id === questionId
+            ? {
+                ...q,
+                text:        newQ.questionText,
+                options:     newQ.options ?? q.options,
+                answer:      newQ.correctAnswer,
+                explanation: newQ.explanation,
+                sourceEvidence: newQ.sourceEvidence || '',
+                sourceFile:     newQ.sourceFile || '',
+                sourcePage:     newQ.sourcePage ?? null,
+                grounded:       newQ.grounded ?? false,
+                approved:    false,
+              }
+            : q,
+        ),
+        questionsActionError: null,
+      }));
+    } catch (err) {
+      set({ questionsActionError: err?.response?.data?.error || err.message });
+    } finally {
+      set((prev) => {
+        const ids = new Set(prev.regeneratingIds);
+        ids.delete(questionId);
+        return { regeneratingIds: ids };
+      });
+    }
+  },
 
   setOcrText: (id, text) =>
     set((s) => ({
@@ -432,6 +560,209 @@ export const useAppStore = create((set, get) => ({
   removeUploadedFile: (id) =>
     set((s) => ({ uploadedFiles: s.uploadedFiles.filter((f) => f.id !== id) })),
 
+  // ─── Real backend: upload PDFs and create project ─────────────────────────
+  uploadPDFsToBackend: async (files, title, subject) => {
+    set((s) => ({ loadingStates: { ...s.loadingStates, uploading: true }, topicsError: null }));
+    try {
+      const formData = new FormData();
+      formData.append('title',   title   || 'Untitled Project');
+      formData.append('subject', subject || '');
+      files.forEach((f) => formData.append('pdfs', f));
+
+      const data = await uploadApi.uploadPDFs(formData, (pct) => {
+        // Update each uploaded file's progress in the store
+        set((s) => ({
+          uploadedFiles: s.uploadedFiles.map((uf) =>
+            files.some((f) => f.name === uf.name) ? { ...uf, progress: pct } : uf
+          ),
+        }));
+      });
+
+      // Save projectId and add files to the uploaded list
+      set((s) => {
+        const next = {
+          projectId: data.projectId,
+          uploadedFiles: [
+            ...s.uploadedFiles.filter((uf) => !files.some((f) => f.name === uf.name)),
+            ...(data.documents || []).map((doc) => ({
+              id:         doc.docId,
+              name:       doc.filename,
+              size:       'uploaded',
+              pages:      doc.pageCount,
+              uploadTime: new Date().toLocaleTimeString(),
+              progress:   100,
+              pdfUrl:     doc.pdfUrl,
+            })),
+          ],
+          loadingStates: { ...s.loadingStates, uploading: false },
+        };
+        persistWorkflow({ projectId: next.projectId, m1CompletedStep: s.m1CompletedStep, examInfo: s.examInfo });
+        return next;
+      });
+
+      return data.projectId;
+    } catch (err) {
+      set((s) => ({
+        topicsError: err?.response?.data?.error || err.message || 'Upload failed',
+        loadingStates: { ...s.loadingStates, uploading: false },
+      }));
+      return null;
+    }
+  },
+
+  // ─── Real backend: detect topics via GPT-4o / Gemini ─────────────────────
+  detectTopicsFromBackend: async (projectId) => {
+    set({ topicsLoading: true, topicsError: null, topicsSaved: false });
+    try {
+      const data = await topicApi.detect(projectId);
+      set({
+        topics:          data.topics,           // already has isSelected: true
+        detectedSubject: data.detectedSubject,
+        llmProvider:     data.provider,
+        topicsLoading:   false,
+      });
+      return data.topics;
+    } catch (err) {
+      set({
+        topicsError:  err?.response?.data?.error || err.message || 'Topic detection failed',
+        topicsLoading: false,
+      });
+      return null;
+    }
+  },
+
+  // ─── Toggle a single topic's isSelected ──────────────────────────────────
+  toggleTopicSelection: (id) =>
+    set((s) => ({
+      topics: s.topics.map((t) => (t.id === id ? { ...t, isSelected: !t.isSelected } : t)),
+      topicsSaved: false,
+    })),
+
+  // ─── Bulk select/deselect all ────────────────────────────────────────────
+  selectAllTopics:   () => set((s) => ({ topics: s.topics.map((t) => ({ ...t, isSelected: true  })), topicsSaved: false })),
+  deselectAllTopics: () => set((s) => ({ topics: s.topics.map((t) => ({ ...t, isSelected: false })), topicsSaved: false })),
+
+  // ─── Save topic selection to backend ─────────────────────────────────────
+  saveTopicSelection: async (projectId) => {
+    const topics = get().topics;
+    try {
+      await topicApi.updateSelection(
+        projectId,
+        topics.map((t) => ({
+          id: t.id,
+          isSelected: t.isSelected,
+          marks: t.marks,
+          weightage: t.weightage,
+          difficulty: t.difficulty,
+        }))
+      );
+      set({ topicsSaved: true });
+      return true;
+    } catch (err) {
+      set({ topicsError: err?.response?.data?.error || err.message || 'Save failed' });
+      return false;
+    }
+  },
+
+  hydrateProjectFromBackend: async (projectId) => {
+    if (!projectId) return false;
+    try {
+      const data = await topicApi.get(projectId);
+      const patch = {
+        topics: data.topics || [],
+        detectedSubject: data.detectedSubject,
+        generationProvider: data.generationProvider || null,
+        topicsError: null,
+      };
+      if (data.examInfo?.examTitle || data.examInfo?.subject) {
+        patch.examInfo = { ...get().examInfo, ...data.examInfo };
+      }
+      if (data.generatedQuestions?.length) {
+        patch.generatedQuestions = data.generatedQuestions;
+        patch.questions = data.generatedQuestions.map(mapApiQuestion);
+        patch.m1CompletedStep = Math.max(get().m1CompletedStep, 4);
+      } else if (data.topics?.length) {
+        patch.m1CompletedStep = Math.max(get().m1CompletedStep, 2);
+      }
+      set(patch);
+      persistWorkflow({
+        projectId,
+        m1CompletedStep: patch.m1CompletedStep ?? get().m1CompletedStep,
+        examInfo: patch.examInfo ?? get().examInfo,
+      });
+      return true;
+    } catch (err) {
+      console.error('[store] hydrateProjectFromBackend failed:', err?.response?.data?.error || err.message);
+      return false;
+    }
+  },
+
+  // ─── Update exam info ────────────────────────────────────────────────────
+  setExamInfo: (patch) =>
+    set((s) => {
+      const examInfo = { ...s.examInfo, ...patch };
+      persistWorkflow({ projectId: s.projectId, m1CompletedStep: s.m1CompletedStep, examInfo });
+      return { examInfo };
+    }),
+
+  setQuestionType: (type, patch) =>
+    set((s) => ({
+      examInfo: {
+        ...s.examInfo,
+        questionTypes: {
+          ...s.examInfo.questionTypes,
+          [type]: { ...s.examInfo.questionTypes[type], ...patch },
+        },
+      },
+    })),
+
+  // ─── Update per-topic config (marks, weightage, difficulty) ──────────────────
+  updateTopicConfig: (id, patch) =>
+    set((s) => ({
+      topics: s.topics.map((t) => (t.id === id ? { ...t, ...patch } : t)),
+    })),
+
+  // ─── Generate questions via LLM ─────────────────────────────────────────────
+  generateQuestionsFromBackend: async (projectId) => {
+    const s = get();
+    set({ questionsLoading: true, questionsError: null });
+
+    // Only include selected topics
+    const selectedTopics = s.topics
+      .filter((t) => t.isSelected)
+      .map((t) => ({
+        topicName:     t.name,
+        weightage:     t.weightage     || 0,
+        marks:         t.marks         || 0,
+        difficulty:    t.difficulty    || 'Mixed',
+        // Used server-side to retrieve the PDF passages for this topic.
+        description:   t.description   || '',
+        keywords:      t.keywords      || [],
+      }));
+
+    try {
+      const data = await questionApi.generate(projectId, {
+        examInfo: s.examInfo,
+        topics:   selectedTopics,
+      });
+      set({
+        generatedQuestions: data.questions,
+        generationProvider: data.provider,
+        groundedCount:      data.groundedCount ?? 0,
+        generationWarnings: data.warnings || [],
+        questionsLoading:   false,
+        questions: data.questions.map(mapApiQuestion),
+      });
+      return data.questions;
+    } catch (err) {
+      set({
+        questionsError:   err?.response?.data?.error || err.message || 'Question generation failed',
+        questionsLoading: false,
+      });
+      return null;
+    }
+  },
+
   // ─── Computed helpers ──────────────────────────────────────────────────────
   activeQuestionCount: () => get().questions.length,
 
@@ -443,4 +774,146 @@ export const useAppStore = create((set, get) => ({
 
   getFlagsForSession: (sessionId) =>
     get().flaggedResponsesData.filter((f) => f.sessionId === sessionId),
+
+  finalizedSessionId: null,
+  finalizeLoading:    false,
+  finalizeError:      null,
+
+  finalizeExamSession: async (projectId) => {
+    if (!projectId) return null;
+    set({ finalizeLoading: true, finalizeError: null });
+    try {
+      const data = await sessionApi.finalize(projectId);
+      const s = data.session;
+      const mapped = mapApiSession(s, s.questions);
+      set((state) => ({
+        finalizedSessionId: s.id,
+        finalizeLoading:    false,
+        examSessions: [
+          mapped,
+          ...state.examSessions.filter(
+            (es) => es.id !== s.id && es.projectId !== s.projectId
+          ),
+        ],
+        selectedSessionId: s.id,
+      }));
+      localStorage.setItem('vg_session_id', s.id);
+      get().completeM1Step(6);
+      return s;
+    } catch (err) {
+      set({
+        finalizeError:   err?.response?.data?.error || err.message || 'Finalize failed',
+        finalizeLoading: false,
+      });
+      return null;
+    }
+  },
+
+  fetchSessionById: async (sessionId) => {
+    if (!sessionId) return null;
+    try {
+      const data = await sessionApi.get(sessionId);
+      const s = data.session;
+      const mapped = mapApiSession(s, s.questions);
+      set((state) => ({
+        examSessions: [
+          mapped,
+          ...state.examSessions.filter((es) => es.id !== mapped.id),
+        ],
+      }));
+      return mapped;
+    } catch {
+      return null;
+    }
+  },
+
+  loadSessionsFromBackend: async () => {
+    set({ sessionsLoading: true });
+    try {
+      const data = await sessionApi.list();
+      const mapped = (data.sessions || []).map((s) => mapApiSession(s));
+      set((state) => ({
+        sessionsLoading: false,
+        examSessions: mapped,
+        selectedSessionId: state.selectedSessionId || mapped[0]?.id || null,
+      }));
+      get().loadEvaluationOverview();
+      return mapped;
+    } catch {
+      set({ sessionsLoading: false });
+      return [];
+    }
+  },
+
+  /** Merges real Module 2 evaluation stats (evaluated/pending/avg score) into examSessions. */
+  loadEvaluationOverview: async () => {
+    try {
+      const data = await evaluationApi.overview();
+      const bySession = new Map((data.overview || []).map((o) => [String(o.sessionId), o]));
+      set((state) => ({
+        examSessions: state.examSessions.map((sess) => {
+          const o = bySession.get(String(sess.id));
+          if (!o) return sess;
+          return {
+            ...sess,
+            studentsEvaluated: o.evaluated,
+            pendingSheets: o.pending,
+            avgScore: o.averagePercentage,
+            evaluationDate: o.lastEvaluatedAt,
+          };
+        }),
+      }));
+    } catch {
+      // Non-critical — dashboard just falls back to zeros for eval stats.
+    }
+  },
+
+  answerSheets: [],
+  evaluationReports: [],
+  evaluationSummary: null,
+  currentAnswerSheetId: localStorage.getItem('vg_sheet_id') || null,
+  evaluationError: null,
+
+  setCurrentAnswerSheet: (id) => {
+    if (id) localStorage.setItem('vg_sheet_id', id);
+    else localStorage.removeItem('vg_sheet_id');
+    set({ currentAnswerSheetId: id });
+  },
+
+  loadAnswerSheets: async (sessionId) => {
+    if (!sessionId) {
+      set({ answerSheets: [] });
+      return [];
+    }
+    try {
+      const data = await ocrApi.listBySession(sessionId);
+      const sheets = data.sheets || [];
+      set({ answerSheets: sheets });
+      return sheets;
+    } catch {
+      set({ answerSheets: [] });
+      return [];
+    }
+  },
+
+  loadEvaluationReports: async (sessionId) => {
+    if (!sessionId) {
+      set({ evaluationReports: [], evaluationSummary: null });
+      return null;
+    }
+    try {
+      const data = await evaluationApi.list(sessionId);
+      set({
+        evaluationReports: data.reports || [],
+        evaluationSummary: data.summary || null,
+        evaluationError: null,
+      });
+      return data;
+    } catch (err) {
+      set({
+        evaluationError: err?.response?.data?.error || err.message || 'Failed to load evaluations',
+      });
+      return null;
+    }
+  },
 }));
